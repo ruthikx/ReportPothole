@@ -1,0 +1,15 @@
+{
+  "name": "pothole-app",
+  "version": "1.0.0",
+  "description": "A MERN + React Native (Expo) monorepo for citizens to report potholes and track resolution.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "expo": "^54.0.16"
+  }
+}

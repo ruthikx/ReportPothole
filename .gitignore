@@ -1,0 +1,12 @@
+node_modules/
+
+backend/.env
+backend/.env.example
+backend/uploads/
+
+mobile/.expo/
+mobile/dist/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
