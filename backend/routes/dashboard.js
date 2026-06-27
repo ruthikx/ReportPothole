@@ -1,5 +1,7 @@
 const express = require('express');
 const Ticket = require('../models/Ticket');
+const { listTicketEvents } = require('../services/ticketEvents');
+const { serializePublicReport } = require('../services/publicReports');
 
 const router = express.Router();
 
@@ -140,14 +142,15 @@ router.get('/status/:reportId', async (req, res, next) => {
   try {
     const ticket = await Ticket.findOne({ reportId: req.params.reportId })
       .populate('ward', 'name')
-      .populate('assignedTo', 'name')
       .lean();
 
     if (!ticket) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    res.json(ticket);
+    const history = await listTicketEvents(ticket._id);
+
+    res.json(serializePublicReport(ticket, history));
   } catch (err) {
     next(err);
   }

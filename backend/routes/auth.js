@@ -2,7 +2,8 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { validate } = require('../middleware/validate');
-const { registerSchema, loginSchema, refreshSchema } = require('../schemas/auth');
+const { requireRole } = require('../middleware/auth');
+const { registerSchema, loginSchema, refreshSchema, deviceSchema } = require('../schemas/auth');
 
 const router = express.Router();
 const jwtSecret = () => process.env.JWT_SECRET || 'potholetrack-dev-secret-change-me';
@@ -107,6 +108,19 @@ router.post('/refresh', validate(refreshSchema), async (req, res, next) => {
     if (err.name === 'JsonWebTokenError') {
       return res.status(401).json({ error: 'Invalid token' });
     }
+    next(err);
+  }
+});
+
+router.post('/device', requireRole('citizen'), validate(deviceSchema), async (req, res, next) => {
+  try {
+    const update = {};
+    if (req.body.fcmToken) update.fcmToken = req.body.fcmToken;
+    if (req.body.deviceId) update.deviceId = req.body.deviceId;
+
+    await User.findByIdAndUpdate(req.auth.sub, update);
+    res.json({ ok: true });
+  } catch (err) {
     next(err);
   }
 });

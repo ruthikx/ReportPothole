@@ -1,6 +1,7 @@
 const Ticket = require('../models/Ticket');
 const User = require('../models/User');
-const { notify } = require('./notifications');
+const { dispatchNotification } = require('./notificationQueue');
+const { recordTicketEvent, systemActor } = require('./ticketEvents');
 
 const ESCALATION_LEVELS = {
   1: { roles: ['supervisor'], label: 'Supervisor', channels: ['fcm', 'sms', 'email'] },
@@ -33,13 +34,22 @@ const runEscalationJob = async () => {
     try {
       const newLevel = Math.min(ticket.escalationLevel + 1, 3);
       const levelConfig = ESCALATION_LEVELS[newLevel];
+      const previousLevel = ticket.escalationLevel;
 
       ticket.escalationLevel = newLevel;
       await ticket.save();
+      await recordTicketEvent({
+        ticketId: ticket._id,
+        actor: systemActor('Escalation job'),
+        action: 'escalated',
+        from: { escalationLevel: previousLevel },
+        to: { escalationLevel: newLevel },
+        note: `Escalated to level ${newLevel}.`,
+      });
 
       const officers = await User.find(escalationMatchFor(ticket, levelConfig));
       for (const officer of officers) {
-        await notify(officer, {
+        await dispatchNotification(officer, {
           title: `Escalation L${newLevel}: ${ticket.reportId}`,
           body: `Pothole ticket ${ticket.reportId} is overdue. ${levelConfig.label} review is required.`,
           channels: levelConfig.channels,

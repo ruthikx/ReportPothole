@@ -1,8 +1,8 @@
 const DOMPurify = require('isomorphic-dompurify');
 
-const validate = (schema) => {
+const validateSource = (schema, source) => {
   return (req, res, next) => {
-    const result = schema.safeParse(req.body);
+    const result = schema.safeParse(req[source]);
     if (!result.success) {
       const errors = result.error.errors.map((e) => ({
         field: e.path.join('.'),
@@ -10,10 +10,14 @@ const validate = (schema) => {
       }));
       return res.status(400).json({ error: 'Validation failed', details: errors });
     }
-    req.body = result.data;
+    req[source] = result.data;
     next();
   };
 };
+
+const validate = (schema) => validateSource(schema, 'body');
+const validateParams = (schema) => validateSource(schema, 'params');
+const validateQuery = (schema) => validateSource(schema, 'query');
 
 const sanitizeDescription = (req, res, next) => {
   if (req.body.description) {
@@ -25,4 +29,4 @@ const sanitizeDescription = (req, res, next) => {
   next();
 };
 
-module.exports = { validate, sanitizeDescription };
+module.exports = { validate, validateParams, validateQuery, sanitizeDescription };

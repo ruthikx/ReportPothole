@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
+import { useFocusEffect } from '@react-navigation/native';
 import api from '../../services/api';
-import { addToQueue } from '../../services/offlineQueue';
+import { addToQueue, flushQueue, getQueueSummary } from '../../services/offlineQueue';
 
 const ReportScreen = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
@@ -25,6 +26,17 @@ const ReportScreen = ({ navigation }) => {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [facing, setFacing] = useState('back');
+  const [queueSummary, setQueueSummary] = useState({
+    total: 0,
+    queued: 0,
+    failed: 0,
+    maxRetries: 0,
+  });
+
+  const refreshQueueSummary = useCallback(async () => {
+    const summary = await getQueueSummary();
+    setQueueSummary(summary);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -37,6 +49,17 @@ const ReportScreen = ({ navigation }) => {
       }
     })();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshQueueSummary();
+    }, [refreshQueueSummary])
+  );
+
+  const handleRetryQueue = async () => {
+    await flushQueue();
+    await refreshQueueSummary();
+  };
 
   const takePhoto = async () => {
     if (!cameraRef.current) return;
@@ -116,6 +139,7 @@ const ReportScreen = ({ navigation }) => {
           multipart,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
+        await refreshQueueSummary();
         Alert.alert('Saved offline', 'The report will be submitted when the device reconnects.');
         setPhoto(null);
         setDescription('');
@@ -164,6 +188,26 @@ const ReportScreen = ({ navigation }) => {
         <Text style={styles.loginText}>Staff sign in</Text>
       </TouchableOpacity>
 
+      {queueSummary.total > 0 && (
+        <View style={styles.queueCard}>
+          <View style={styles.queueHeader}>
+            <Text style={styles.queueTitle}>Offline queue</Text>
+            <TouchableOpacity onPress={handleRetryQueue} disabled={loading}>
+              <Text style={styles.queueAction}>Retry now</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.queueText}>
+            {queueSummary.queued} waiting to sync
+            {queueSummary.failed > 0 ? `, ${queueSummary.failed} failed after retry` : ''}
+          </Text>
+          {queueSummary.failed > 0 && (
+            <Text style={styles.queueError}>
+              Check your connection and retry. Failed items stay saved on this device.
+            </Text>
+          )}
+        </View>
+      )}
+
       {photo ? (
         <View style={styles.photoPreview}>
           <Image source={{ uri: photo.uri }} style={styles.previewImage} />
@@ -201,7 +245,7 @@ const ReportScreen = ({ navigation }) => {
 
       {location && (
         <Text style={styles.locationText}>
-          📍 {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+          Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
         </Text>
       )}
 
@@ -256,6 +300,39 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 13,
     fontWeight: '600',
+  },
+  queueCard: {
+    backgroundColor: '#fff',
+    borderLeftColor: '#f59e0b',
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  queueHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  queueTitle: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  queueAction: {
+    color: '#1a73e8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  queueText: {
+    color: '#555',
+    fontSize: 13,
+  },
+  queueError: {
+    color: '#b45309',
+    fontSize: 12,
+    marginTop: 4,
   },
   cameraContainer: {
     height: 350,

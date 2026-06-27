@@ -8,7 +8,7 @@ export default function Analytics() {
     api.get('/dashboard/stats').then((res) => setStats(res.data)).catch(() => setStats(null));
   }, []);
 
-  if (!stats) return <section className="page empty-state">Loading analytics…</section>;
+  if (!stats) return <section className="page empty-state">Loading analytics...</section>;
 
   return (
     <section className="page stats-grid">

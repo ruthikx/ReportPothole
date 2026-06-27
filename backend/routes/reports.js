@@ -3,11 +3,22 @@ const Ticket = require('../models/Ticket');
 const Counter = require('../models/Counter');
 const { optionalAuth, requireRole } = require('../middleware/auth');
 const { upload } = require('../middleware/upload');
-const { validate, sanitizeDescription } = require('../middleware/validate');
+const { sanitizeDescription } = require('../middleware/validate');
 const { createReportSchema } = require('../schemas/reports');
 const { findWardByPoint } = require('../services/geoRouter');
-const { sendPushNotification } = require('../services/notifications');
-const { findDuplicate } = require('../services/duplicateDetect');
+const { dispatchNotification } = require('../services/notificationQueue');
+const { computeImageHash, findDuplicate } = require('../services/duplicateDetect');
+const {
+  cleanupStoredUploads,
+  getStoredUploadIdentifiers,
+  getStoredUploadKey,
+} = require('../services/uploadStorage');
+const {
+  actorFromAuth,
+  listTicketEvents,
+  recordTicketEvent,
+} = require('../services/ticketEvents');
+const { serializePublicReport } = require('../services/publicReports');
 const redis = require('../config/redis');
 const User = require('../models/User');
 
@@ -46,6 +57,49 @@ const enforceReportRateLimit = async (fingerprint) => {
   }
 };
 
+const getUploadedReportFiles = (req) => [
+  ...(req.files?.photo || []),
+  ...(req.files?.photos || []),
+];
+
+const isUploadReferencedByTicket = async (upload, key) => {
+  const identifiers = getStoredUploadIdentifiers(upload);
+  if (key) identifiers.push(key);
+
+  const uniqueIdentifiers = [...new Set(identifiers.filter(Boolean))];
+  if (uniqueIdentifiers.length === 0) return false;
+
+  const existingTicket = await Ticket.exists({
+    $or: [
+      { 'photos.before': { $in: uniqueIdentifiers } },
+      { 'photos.after': { $in: uniqueIdentifiers } },
+    ],
+  });
+
+  return Boolean(existingTicket);
+};
+
+const cleanupUploadedReportFiles = async (files) => {
+  await cleanupStoredUploads(files, {
+    isReferenced: (key, upload) => isUploadReferencedByTicket(upload, key),
+  });
+};
+
+const validateReportBody = async (req, res, next) => {
+  const result = createReportSchema.safeParse(req.body);
+  if (!result.success) {
+    await cleanupUploadedReportFiles(getUploadedReportFiles(req));
+    const errors = result.error.errors.map((e) => ({
+      field: e.path.join('.'),
+      message: e.message,
+    }));
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
+
+  req.body = result.data;
+  next();
+};
+
 router.post(
   '/',
   optionalAuth,
@@ -53,21 +107,19 @@ router.post(
     { name: 'photo', maxCount: 1 },
     { name: 'photos', maxCount: 5 },
   ]),
-  validate(createReportSchema),
+  validateReportBody,
   sanitizeDescription,
   async (req, res, next) => {
     try {
+      const uploaded = getUploadedReportFiles(req);
       const fingerprint = getDeviceFingerprint(req);
       const allowed = await enforceReportRateLimit(fingerprint);
       if (!allowed) {
+        await cleanupUploadedReportFiles(uploaded);
         return res.status(429).json({ error: 'Too many reports. Limit is 5 per hour.' });
       }
 
       const { lat, lng, description, address, deviceId, fcmToken } = req.body;
-      const uploaded = [
-        ...(req.files?.photo || []),
-        ...(req.files?.photos || []),
-      ];
 
       if (uploaded.length === 0) {
         return res.status(400).json({ error: 'A pothole photo is required' });
@@ -75,11 +127,25 @@ router.post(
 
       const longitude = Number(lng);
       const latitude = Number(lat);
-      const duplicate = await findDuplicate(longitude, latitude);
+      const firstImageHash = await computeImageHash(uploaded[0]);
+      const duplicate = await findDuplicate(longitude, latitude, {
+        imageHash: firstImageHash,
+      });
 
       if (duplicate) {
+        const previousUpvotes = duplicate.upvotes;
         duplicate.upvotes += 1;
         await duplicate.save();
+        await recordTicketEvent({
+          ticketId: duplicate._id,
+          actor: actorFromAuth(req.auth),
+          action: 'duplicate_upvote',
+          from: { upvotes: previousUpvotes },
+          to: { upvotes: duplicate.upvotes },
+          note: 'Duplicate report upvote counted.',
+        });
+
+        await cleanupUploadedReportFiles(uploaded);
 
         return res.json({
           reportId: duplicate.reportId,
@@ -90,7 +156,10 @@ router.post(
       }
 
       const ward = await findWardByPoint(longitude, latitude);
-      const beforePhotos = uploaded.map((f) => f.key || f.path || f.filename);
+      const beforePhotos = uploaded.map((f) => getStoredUploadKey(f)).filter(Boolean);
+      const beforeHashes = (
+        await Promise.all(uploaded.map((file) => computeImageHash(file)))
+      ).filter(Boolean);
 
       const slaHours = ward ? ward.slaHours : 168;
       const slaDeadline = new Date(Date.now() + slaHours * 60 * 60 * 1000);
@@ -106,6 +175,7 @@ router.post(
         ward: ward ? ward._id : undefined,
         address,
         photos: { before: beforePhotos },
+        imageHashes: { before: beforeHashes },
         description,
         status: 'open',
         reportedBy: req.auth?.sub,
@@ -114,6 +184,13 @@ router.post(
         escalationLevel: 0,
       });
       await ticket.save();
+      await recordTicketEvent({
+        ticketId: ticket._id,
+        actor: actorFromAuth(req.auth),
+        action: 'report_created',
+        to: { status: ticket.status, upvotes: ticket.upvotes },
+        note: 'Report created.',
+      });
 
       if (req.auth?.sub && (deviceId || fcmToken)) {
         await User.findByIdAndUpdate(req.auth.sub, {
@@ -124,13 +201,13 @@ router.post(
 
       if (ward && ward.assignedEngineer) {
         const engineer = await User.findById(ward.assignedEngineer);
-        if (engineer && engineer.fcmToken) {
-          await sendPushNotification(
-            engineer.fcmToken,
-            `New Pothole Report: ${reportId}`,
-            `A new pothole has been reported in ${ward.name}. Please investigate.`,
-            { ticketId: ticket._id.toString(), reportId }
-          );
+        if (engineer) {
+          await dispatchNotification(engineer, {
+            title: `New Pothole Report: ${reportId}`,
+            body: `A new pothole has been reported in ${ward.name}. Please investigate.`,
+            channels: ['fcm'],
+            data: { ticketId: ticket._id.toString(), reportId },
+          });
         }
       }
 
@@ -142,6 +219,7 @@ router.post(
         slaDeadline,
       });
     } catch (err) {
+      await cleanupUploadedReportFiles(getUploadedReportFiles(req));
       next(err);
     }
   }
@@ -151,14 +229,15 @@ router.get('/:reportId', async (req, res, next) => {
   try {
     const ticket = await Ticket.findOne({ reportId: req.params.reportId })
       .populate('ward', 'name')
-      .populate('assignedTo', 'name')
-      .populate('reportedBy', 'name');
+      .lean();
 
     if (!ticket) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    res.json(ticket);
+    const history = await listTicketEvents(ticket._id);
+
+    res.json(serializePublicReport(ticket, history));
   } catch (err) {
     next(err);
   }
@@ -176,6 +255,14 @@ router.post('/:id/upvote', optionalAuth, async (req, res, next) => {
 
     ticket.upvotes += 1;
     await ticket.save();
+    await recordTicketEvent({
+      ticketId: ticket._id,
+      actor: actorFromAuth(req.auth),
+      action: 'duplicate_upvote',
+      from: { upvotes: ticket.upvotes - 1 },
+      to: { upvotes: ticket.upvotes },
+      note: 'Duplicate report upvote counted.',
+    });
 
     res.json({ upvotes: ticket.upvotes });
   } catch (err) {

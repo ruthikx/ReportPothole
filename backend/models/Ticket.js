@@ -32,6 +32,10 @@ const ticketSchema = new mongoose.Schema(
       before: [{ type: String }],
       after: [{ type: String }],
     },
+    imageHashes: {
+      before: [{ type: String }],
+      after: [{ type: String }],
+    },
     description: {
       type: String,
       trim: true,

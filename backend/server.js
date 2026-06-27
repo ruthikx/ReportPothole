@@ -13,13 +13,15 @@ const reportRoutes = require('./routes/reports');
 const ticketRoutes = require('./routes/tickets');
 const statsRoutes = require('./routes/stats');
 const dashboardRoutes = require('./routes/dashboard');
+const adminRoutes = require('./routes/admin');
 const errorHandler = require('./middleware/errorHandler');
 const { runEscalationJob } = require('./services/escalation');
+const { startNotificationWorker } = require('./workers/notificationWorker');
+const { getNotificationQueue } = require('./services/notificationQueue');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'potholetrack-dev-secret-change-me';
-const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
 
 if (!process.env.JWT_SECRET) {
   console.warn('[Config] JWT_SECRET is not set; using an insecure development fallback.');
@@ -37,17 +39,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use(limiter);
-
-let notificationQueue = null;
-if (process.env.ENABLE_NOTIFICATION_QUEUE === 'true') {
-  const { Queue: BullQueue } = require('bullmq');
-  const redis = require('./config/redis');
-  if (redis) {
-    notificationQueue = new BullQueue('notifications', { connection: redis });
-  } else {
-    console.warn('[Queue] Notification queue disabled because REDIS_URL is not set.');
-  }
-}
 
 const apiAuth = jwt({
   secret: JWT_SECRET,
@@ -72,28 +63,45 @@ apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/tickets', ticketRoutes);
 apiRouter.use('/stats', statsRoutes);
 apiRouter.use('/dashboard', dashboardRoutes);
+apiRouter.use('/admin', adminRoutes);
 
 app.use('/api/v1', apiRouter);
 app.use('/api', apiRouter);
 
 app.use(errorHandler);
 
-cron.schedule('0 6 * * *', async () => {
-  console.log('[Cron] Running daily escalation check at 06:00');
-  try {
-    await runEscalationJob();
-  } catch (err) {
-    console.error('[Cron] Escalation job failed:', err);
+let escalationCron = null;
+const shouldStartBackgroundJobs = () => process.env.NODE_ENV !== 'test';
+
+const startBackgroundJobs = () => {
+  startNotificationWorker();
+
+  if (escalationCron || !shouldStartBackgroundJobs()) {
+    return escalationCron;
   }
-});
+
+  escalationCron = cron.schedule('0 6 * * *', async () => {
+    console.log('[Cron] Running daily escalation check at 06:00');
+    try {
+      await runEscalationJob();
+    } catch (err) {
+      console.error('[Cron] Escalation job failed:', err);
+    }
+  });
+
+  return escalationCron;
+};
 
 const start = async () => {
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+
   if (!mongoUri) {
     throw new Error('MONGO_URI or MONGODB_URI must be set');
   }
 
   await mongoose.connect(mongoUri);
   console.log('Connected to MongoDB');
+  startBackgroundJobs();
   return app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 };
 
@@ -104,4 +112,10 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, notificationQueue, start };
+const exported = { app, getNotificationQueue, start, startBackgroundJobs };
+Object.defineProperty(exported, 'notificationQueue', {
+  enumerable: true,
+  get: getNotificationQueue,
+});
+
+module.exports = exported;

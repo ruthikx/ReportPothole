@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../../services/api';
+import { flushQueue, getQueueSummary } from '../../services/offlineQueue';
 
 const STATUS_COLORS = {
   open: '#f59e0b',
@@ -23,11 +24,22 @@ const MyTicketsScreen = ({ navigation }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [queueSummary, setQueueSummary] = useState({
+    total: 0,
+    queued: 0,
+    failed: 0,
+    maxRetries: 0,
+  });
+
+  const refreshQueueSummary = useCallback(async () => {
+    const summary = await getQueueSummary();
+    setQueueSummary(summary);
+  }, []);
 
   const fetchTickets = async () => {
     try {
       const response = await api.get('/tickets', {
-        params: { status: 'assigned', limit: 100 },
+        params: { status: 'assigned,in_progress', limit: 100 },
       });
       setTickets(response.data.tickets);
     } catch (err) {
@@ -42,12 +54,19 @@ const MyTicketsScreen = ({ navigation }) => {
     useCallback(() => {
       setLoading(true);
       fetchTickets();
-    }, [])
+      refreshQueueSummary();
+    }, [refreshQueueSummary])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchTickets();
+    refreshQueueSummary();
+  };
+
+  const handleRetryQueue = async () => {
+    await flushQueue();
+    await refreshQueueSummary();
   };
 
   const getSlaCountdown = (deadline) => {
@@ -121,7 +140,26 @@ const MyTicketsScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>My Assigned Tickets</Text>
+      <Text style={styles.title}>My Work Tickets</Text>
+      {queueSummary.total > 0 && (
+        <View style={styles.queueCard}>
+          <View style={styles.queueHeader}>
+            <Text style={styles.queueTitle}>Offline queue</Text>
+            <TouchableOpacity onPress={handleRetryQueue}>
+              <Text style={styles.queueAction}>Retry now</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.queueText}>
+            {queueSummary.queued} waiting to sync
+            {queueSummary.failed > 0 ? `, ${queueSummary.failed} failed after retry` : ''}
+          </Text>
+          {queueSummary.failed > 0 && (
+            <Text style={styles.queueError}>
+              Failed items remain saved on this device until they sync.
+            </Text>
+          )}
+        </View>
+      )}
       <FlatList
         data={tickets}
         renderItem={renderTicket}
@@ -131,7 +169,7 @@ const MyTicketsScreen = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>No assigned tickets</Text>
+          <Text style={styles.empty}>No assigned or in-progress tickets</Text>
         }
       />
     </View>
@@ -154,6 +192,40 @@ const styles = StyleSheet.create({
     color: '#333',
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
+  },
+  queueCard: {
+    backgroundColor: '#fff',
+    borderLeftColor: '#f59e0b',
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+  },
+  queueHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  queueTitle: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  queueAction: {
+    color: '#1a73e8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  queueText: {
+    color: '#555',
+    fontSize: 13,
+  },
+  queueError: {
+    color: '#b45309',
+    fontSize: 12,
+    marginTop: 4,
   },
   list: {
     padding: 16,

@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -15,18 +14,34 @@ import api from '../../services/api';
 const AssignScreen = ({ route, navigation }) => {
   const { ticket } = route.params;
   const [workerId, setWorkerId] = useState('');
+  const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        const params = ticket.ward?._id ? { ward: ticket.ward._id } : {};
+        const response = await api.get('/tickets/meta/workers', { params });
+        setWorkers(response.data.workers || []);
+      } catch (err) {
+        console.error('Failed to fetch workers:', err.message);
+        setWorkers([]);
+      }
+    };
+
+    fetchWorkers();
+  }, [ticket.ward?._id]);
+
   const handleAssign = async () => {
-    if (!workerId.trim()) {
-      Alert.alert('Error', 'Please enter a worker ID');
+    if (!workerId) {
+      Alert.alert('Error', 'Please select a worker');
       return;
     }
 
     setLoading(true);
     try {
       await api.patch(`/tickets/${ticket._id}/assign`, {
-        workerId: workerId.trim(),
+        workerId,
       });
 
       Alert.alert('Success', `Ticket ${ticket.reportId} assigned`, [
@@ -65,13 +80,40 @@ const AssignScreen = ({ route, navigation }) => {
       </View>
 
       <Text style={styles.sectionTitle}>Assign to Worker</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter Worker User ID"
-        value={workerId}
-        onChangeText={setWorkerId}
-        autoCapitalize="none"
-      />
+      <View style={styles.workerList}>
+        {workers.map((worker) => (
+          <TouchableOpacity
+            key={worker._id}
+            style={[
+              styles.workerOption,
+              workerId === worker._id && styles.workerOptionActive,
+            ]}
+            onPress={() => setWorkerId(worker._id)}
+          >
+            <View>
+              <Text
+                style={[
+                  styles.workerName,
+                  workerId === worker._id && styles.workerNameActive,
+                ]}
+              >
+                {worker.name}
+              </Text>
+              <Text
+                style={[
+                  styles.workerMeta,
+                  workerId === worker._id && styles.workerMetaActive,
+                ]}
+              >
+                {worker.phone || worker.email || worker.ward?.name || 'Worker'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+        {workers.length === 0 && (
+          <Text style={styles.emptyWorkers}>No workers found for this ward</Text>
+        )}
+      </View>
 
       <TouchableOpacity
         style={[styles.assignButton, loading && styles.disabled]}
@@ -134,14 +176,40 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  input: {
+  workerList: {
+    marginBottom: 16,
+  },
+  workerOption: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
+    padding: 12,
+    marginBottom: 8,
+  },
+  workerOptionActive: {
+    backgroundColor: '#e8f0fe',
+    borderColor: '#1a73e8',
+  },
+  workerName: {
+    color: '#333',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  workerNameActive: {
+    color: '#1a73e8',
+  },
+  workerMeta: {
+    color: '#777',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  workerMetaActive: {
+    color: '#1a73e8',
+  },
+  emptyWorkers: {
+    color: '#888',
+    fontSize: 14,
     marginBottom: 16,
   },
   assignButton: {

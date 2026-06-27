@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
-  TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../../services/api';
@@ -28,8 +27,19 @@ const AllTicketsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [wardFilter, setWardFilter] = useState('');
+  const [wards, setWards] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  const fetchWards = async () => {
+    try {
+      const response = await api.get('/tickets/meta/wards');
+      setWards(response.data.wards || []);
+    } catch (err) {
+      console.error('Failed to fetch wards:', err.message);
+      setWards([]);
+    }
+  };
 
   const fetchTickets = async (pageNum = 1) => {
     try {
@@ -52,6 +62,7 @@ const AllTicketsScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
+      fetchWards();
       fetchTickets();
     }, [statusFilter, wardFilter])
   );
@@ -166,12 +177,43 @@ const AllTicketsScreen = ({ navigation }) => {
             </TouchableOpacity>
           ))}
         </View>
-        <TextInput
-          style={styles.wardInput}
-          placeholder="Filter by Ward ID"
-          value={wardFilter}
-          onChangeText={setWardFilter}
-        />
+        <View style={styles.filterRow}>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              wardFilter === '' && styles.filterChipActive,
+            ]}
+            onPress={() => setWardFilter('')}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                wardFilter === '' && styles.filterChipTextActive,
+              ]}
+            >
+              All wards
+            </Text>
+          </TouchableOpacity>
+          {wards.map((ward) => (
+            <TouchableOpacity
+              key={ward._id}
+              style={[
+                styles.filterChip,
+                wardFilter === ward._id && styles.filterChipActive,
+              ]}
+              onPress={() => setWardFilter(ward._id)}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  wardFilter === ward._id && styles.filterChipTextActive,
+                ]}
+              >
+                {ward.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       <FlatList
@@ -263,15 +305,6 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#fff',
-  },
-  wardInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
   },
   list: {
     padding: 16,

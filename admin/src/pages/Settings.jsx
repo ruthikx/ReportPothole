@@ -9,8 +9,8 @@ export default function Settings() {
     let mounted = true;
 
     Promise.all([
-      api.get('/tickets/meta/wards').then((res) => res.data.wards || []).catch(() => []),
-      api.get('/tickets/meta/users').then((res) => res.data.users || []).catch(() => []),
+      api.get('/admin/wards').then((res) => res.data.wards || []).catch(() => []),
+      api.get('/admin/users').then((res) => res.data.users || []).catch(() => []),
     ]).then(([nextWards, nextUsers]) => {
       if (!mounted) return;
       setWards(nextWards);

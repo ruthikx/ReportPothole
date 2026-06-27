@@ -6,6 +6,7 @@ const STATUS_FILTERS = ['', 'open', 'assigned', 'in_progress', 'resolved'];
 
 export default function Queue({ onSelectTicket }) {
   const [tickets, setTickets] = useState([]);
+  const [wards, setWards] = useState([]);
   const [status, setStatus] = useState('');
   const [ward, setWard] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,6 +15,17 @@ export default function Queue({ onSelectTicket }) {
     () => ({ status: status || undefined, ward: ward || undefined, limit: 100 }),
     [status, ward]
   );
+
+  useEffect(() => {
+    let mounted = true;
+    api
+      .get('/tickets/meta/wards')
+      .then((res) => mounted && setWards(res.data.wards || []))
+      .catch(() => mounted && setWards([]));
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -43,7 +55,12 @@ export default function Queue({ onSelectTicket }) {
             </button>
           ))}
         </div>
-        <input value={ward} onChange={(e) => setWard(e.target.value)} placeholder="Ward ID" />
+        <select value={ward} onChange={(e) => setWard(e.target.value)}>
+          <option value="">All wards</option>
+          {wards.map((item) => (
+            <option key={item._id} value={item._id}>{item.name}</option>
+          ))}
+        </select>
       </div>
       {loading ? (
         <div className="empty-state">Loading queue...</div>

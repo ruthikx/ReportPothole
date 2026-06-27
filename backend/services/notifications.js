@@ -1,8 +1,10 @@
 const admin = require('firebase-admin');
+const sgMail = require('@sendgrid/mail');
 const twilio = require('twilio');
 
 let firebaseInitialized = false;
 let twilioClient = null;
+let sendGridApiKey = null;
 
 const initFirebase = () => {
   if (firebaseInitialized) return;
@@ -34,6 +36,23 @@ const initTwilio = () => {
     return;
   }
   twilioClient = twilio(sid, token);
+};
+
+const initSendGrid = () => {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from = process.env.EMAIL_FROM;
+
+  if (!apiKey || !from) {
+    console.warn('[Email] Cannot send email: SENDGRID_API_KEY and EMAIL_FROM must be configured');
+    return false;
+  }
+
+  if (sendGridApiKey !== apiKey) {
+    sgMail.setApiKey(apiKey);
+    sendGridApiKey = apiKey;
+  }
+
+  return true;
 };
 
 const sendPushNotification = async (fcmToken, title, body, data = {}) => {
@@ -78,21 +97,36 @@ const sendSms = async (to, message) => {
 };
 
 const sendEmail = async (to, subject, body) => {
-  if (!to || !process.env.SENDGRID_API_KEY) {
-    console.warn('[Email] Cannot send email: SendGrid is not configured');
+  if (!initSendGrid()) {
     return false;
   }
 
-  console.log('[Email] Email dispatch placeholder:', { to, subject, body });
-  return true;
+  if (!to) {
+    console.warn('[Email] Cannot send email: recipient is missing');
+    return false;
+  }
+
+  try {
+    await sgMail.send({
+      to,
+      from: process.env.EMAIL_FROM,
+      subject,
+      text: body,
+    });
+    console.log('[Email] Email sent to', to);
+    return true;
+  } catch (err) {
+    console.error('[Email] Failed to send email:', err.message);
+    return false;
+  }
 };
 
-const notify = async (user, { title, body, channels = ['fcm'] }) => {
+const notify = async (user, { title, body, channels = ['fcm'], data = {} }) => {
   if (!user) return false;
 
   const results = [];
   if (channels.includes('fcm') && user.fcmToken) {
-    results.push(await sendPushNotification(user.fcmToken, title, body));
+    results.push(await sendPushNotification(user.fcmToken, title, body, data));
   }
   if (channels.includes('sms') && user.phone) {
     results.push(await sendSms(user.phone, `${title}\n${body}`));

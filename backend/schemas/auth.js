@@ -20,4 +20,11 @@ const refreshSchema = z.object({
   token: z.string().min(1, 'Token is required'),
 });
 
-module.exports = { registerSchema, loginSchema, refreshSchema };
+const deviceSchema = z.object({
+  fcmToken: z.string().min(1).max(500).optional(),
+  deviceId: z.string().max(200).optional(),
+}).refine((data) => data.fcmToken || data.deviceId, {
+  message: 'fcmToken or deviceId is required',
+});
+
+module.exports = { registerSchema, loginSchema, refreshSchema, deviceSchema };
