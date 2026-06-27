@@ -28,6 +28,25 @@ export const addToQueue = async (requestConfig) => {
   await setQueue(queue);
 };
 
+const buildFormData = (parts = []) => {
+  const formData = new FormData();
+
+  parts.forEach((part) => {
+    if (part.uri) {
+      formData.append(part.name, {
+        uri: part.uri,
+        type: part.type || 'image/jpeg',
+        name: part.fileName || `${part.name}.jpg`,
+      });
+      return;
+    }
+
+    formData.append(part.name, String(part.value ?? ''));
+  });
+
+  return formData;
+};
+
 export const flushQueue = async () => {
   const state = await NetInfo.fetch();
   if (!state.isConnected) return;
@@ -44,11 +63,16 @@ export const flushQueue = async () => {
       delete config._retries;
 
       const method = config.method || 'post';
+      const data = Array.isArray(config.multipart)
+        ? buildFormData(config.multipart)
+        : config.data;
+
       await api({
         method,
         url: config.url,
-        data: config.data,
+        data,
         headers: config.headers || {},
+        params: config.params,
       });
     } catch (err) {
       const retries = (item._retries || 0) + 1;

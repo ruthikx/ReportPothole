@@ -12,11 +12,18 @@ const authRoutes = require('./routes/auth');
 const reportRoutes = require('./routes/reports');
 const ticketRoutes = require('./routes/tickets');
 const statsRoutes = require('./routes/stats');
+const dashboardRoutes = require('./routes/dashboard');
 const errorHandler = require('./middleware/errorHandler');
 const { runEscalationJob } = require('./services/escalation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'potholetrack-dev-secret-change-me';
+const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+if (!process.env.JWT_SECRET) {
+  console.warn('[Config] JWT_SECRET is not set; using an insecure development fallback.');
+}
 
 app.use(helmet());
 app.use(cors());
@@ -35,30 +42,39 @@ let notificationQueue = null;
 if (process.env.ENABLE_NOTIFICATION_QUEUE === 'true') {
   const { Queue: BullQueue } = require('bullmq');
   const redis = require('./config/redis');
-  notificationQueue = new BullQueue('notifications', { connection: redis });
+  if (redis) {
+    notificationQueue = new BullQueue('notifications', { connection: redis });
+  } else {
+    console.warn('[Queue] Notification queue disabled because REDIS_URL is not set.');
+  }
 }
 
-app.use(
-  '/api/v1',
-  jwt({
-    secret: process.env.JWT_SECRET,
-    algorithms: ['HS256'],
-  }).unless({
-    path: [
-      { url: '/auth/register', methods: ['POST'] },
-      { url: '/auth/login', methods: ['POST'] },
-      { url: '/auth/refresh', methods: ['POST'] },
-      { url: '/reports', methods: ['POST'] },
-      { url: /^\/reports\/[^/]+$/, methods: ['GET'] },
-      { url: /^\/reports\/[^/]+\/upvote$/, methods: ['POST'] },
-    ],
-  })
-);
+const apiAuth = jwt({
+  secret: JWT_SECRET,
+  algorithms: ['HS256'],
+}).unless({
+  useOriginalUrl: false,
+  path: [
+    { url: '/auth/register', methods: ['POST'] },
+    { url: '/auth/login', methods: ['POST'] },
+    { url: '/auth/refresh', methods: ['POST'] },
+    { url: '/reports', methods: ['POST'] },
+    { url: /^\/reports\/[^/]+$/, methods: ['GET'] },
+    { url: /^\/reports\/[^/]+\/upvote$/, methods: ['POST'] },
+    { url: /^\/dashboard(?:\/.*)?$/, methods: ['GET'] },
+  ],
+});
 
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/reports', reportRoutes);
-app.use('/api/v1/tickets', ticketRoutes);
-app.use('/api/v1/stats', statsRoutes);
+const apiRouter = express.Router();
+apiRouter.use(apiAuth);
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/tickets', ticketRoutes);
+apiRouter.use('/stats', statsRoutes);
+apiRouter.use('/dashboard', dashboardRoutes);
+
+app.use('/api/v1', apiRouter);
+app.use('/api', apiRouter);
 
 app.use(errorHandler);
 
@@ -71,15 +87,21 @@ cron.schedule('0 6 * * *', async () => {
   }
 });
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  })
-  .catch((err) => {
+const start = async () => {
+  if (!mongoUri) {
+    throw new Error('MONGO_URI or MONGODB_URI must be set');
+  }
+
+  await mongoose.connect(mongoUri);
+  console.log('Connected to MongoDB');
+  return app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+};
+
+if (require.main === module) {
+  start().catch((err) => {
     console.error('MongoDB connection error:', err);
     process.exit(1);
   });
+}
 
-module.exports = { app, notificationQueue };
+module.exports = { app, notificationQueue, start };

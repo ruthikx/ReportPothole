@@ -7,7 +7,7 @@ let twilioClient = null;
 const initFirebase = () => {
   if (firebaseInitialized) return;
   try {
-    const saKey = process.env.FIREBASE_SA_KEY;
+    const saKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SA_KEY;
     if (!saKey) {
       console.warn('[FCM] Firebase service account key not configured');
       return;
@@ -66,7 +66,7 @@ const sendSms = async (to, message) => {
   try {
     await twilioClient.messages.create({
       body: message,
-      from: process.env.TWILIO_FROM_NUMBER,
+      from: process.env.TWILIO_FROM || process.env.TWILIO_FROM_NUMBER,
       to,
     });
     console.log('[Twilio] SMS sent to', to);
@@ -77,4 +77,31 @@ const sendSms = async (to, message) => {
   }
 };
 
-module.exports = { sendPushNotification, sendSms };
+const sendEmail = async (to, subject, body) => {
+  if (!to || !process.env.SENDGRID_API_KEY) {
+    console.warn('[Email] Cannot send email: SendGrid is not configured');
+    return false;
+  }
+
+  console.log('[Email] Email dispatch placeholder:', { to, subject, body });
+  return true;
+};
+
+const notify = async (user, { title, body, channels = ['fcm'] }) => {
+  if (!user) return false;
+
+  const results = [];
+  if (channels.includes('fcm') && user.fcmToken) {
+    results.push(await sendPushNotification(user.fcmToken, title, body));
+  }
+  if (channels.includes('sms') && user.phone) {
+    results.push(await sendSms(user.phone, `${title}\n${body}`));
+  }
+  if (channels.includes('email') && user.email) {
+    results.push(await sendEmail(user.email, title, body));
+  }
+
+  return results.some(Boolean);
+};
+
+module.exports = { sendPushNotification, sendSms, sendEmail, notify };

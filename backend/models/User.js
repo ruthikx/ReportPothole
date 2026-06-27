@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['citizen', 'worker', 'admin'],
+      enum: ['citizen', 'worker', 'engineer', 'supervisor', 'commissioner', 'admin'],
       default: 'citizen',
     },
     ward: {
@@ -34,6 +34,10 @@ const userSchema = new mongoose.Schema(
     },
     fcmToken: {
       type: String,
+    },
+    deviceId: {
+      type: String,
+      trim: true,
     },
   },
   {

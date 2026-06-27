@@ -1,12 +1,13 @@
 const express = require('express');
 const Ticket = require('../models/Ticket');
 const Counter = require('../models/Counter');
-const { requireRole } = require('../middleware/auth');
+const { optionalAuth, requireRole } = require('../middleware/auth');
 const { upload } = require('../middleware/upload');
 const { validate, sanitizeDescription } = require('../middleware/validate');
 const { createReportSchema } = require('../schemas/reports');
 const { findWardByPoint } = require('../services/geoRouter');
 const { sendPushNotification } = require('../services/notifications');
+const { findDuplicate } = require('../services/duplicateDetect');
 const redis = require('../config/redis');
 const User = require('../models/User');
 
@@ -26,38 +27,55 @@ const RATE_LIMIT_WINDOW = 60 * 60 * 1000;
 const RATE_LIMIT_MAX = 5;
 
 const getDeviceFingerprint = (req) => {
-  return req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  return req.body.deviceId || req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+};
+
+const enforceReportRateLimit = async (fingerprint) => {
+  if (!redis || redis.status === 'end') return true;
+
+  try {
+    const rateKey = `report_rate:${fingerprint}`;
+    const currentCount = await redis.incr(rateKey);
+    if (currentCount === 1) {
+      await redis.pexpire(rateKey, RATE_LIMIT_WINDOW);
+    }
+    return currentCount <= RATE_LIMIT_MAX;
+  } catch (err) {
+    console.warn('[Reports] Redis rate limit skipped:', err.message);
+    return true;
+  }
 };
 
 router.post(
   '/',
-  requireRole('citizen'),
-  upload.array('photos', 5),
+  optionalAuth,
+  upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'photos', maxCount: 5 },
+  ]),
   validate(createReportSchema),
   sanitizeDescription,
   async (req, res, next) => {
     try {
       const fingerprint = getDeviceFingerprint(req);
-      const rateKey = `report_rate:${fingerprint}`;
-      const currentCount = await redis.incr(rateKey);
-      if (currentCount === 1) {
-        await redis.pexpire(rateKey, RATE_LIMIT_WINDOW);
-      }
-      if (currentCount > RATE_LIMIT_MAX) {
+      const allowed = await enforceReportRateLimit(fingerprint);
+      if (!allowed) {
         return res.status(429).json({ error: 'Too many reports. Limit is 5 per hour.' });
       }
 
-      const { lat, lng, description } = req.body;
+      const { lat, lng, description, address, deviceId, fcmToken } = req.body;
+      const uploaded = [
+        ...(req.files?.photo || []),
+        ...(req.files?.photos || []),
+      ];
 
-      const duplicate = await Ticket.findOne({
-        location: {
-          $near: {
-            $geometry: { type: 'Point', coordinates: [lng, lat] },
-            $maxDistance: 50,
-          },
-        },
-        status: { $ne: 'resolved' },
-      });
+      if (uploaded.length === 0) {
+        return res.status(400).json({ error: 'A pothole photo is required' });
+      }
+
+      const longitude = Number(lng);
+      const latitude = Number(lat);
+      const duplicate = await findDuplicate(longitude, latitude);
 
       if (duplicate) {
         duplicate.upvotes += 1;
@@ -66,13 +84,13 @@ router.post(
         return res.json({
           reportId: duplicate.reportId,
           isDuplicate: true,
+          upvotes: duplicate.upvotes,
           message: 'This pothole has already been reported. Your upvote has been counted.',
         });
       }
 
-      const ward = await findWardByPoint(lng, lat);
-
-      const beforePhotos = (req.files || []).map((f) => f.key);
+      const ward = await findWardByPoint(longitude, latitude);
+      const beforePhotos = uploaded.map((f) => f.key || f.path || f.filename);
 
       const slaHours = ward ? ward.slaHours : 168;
       const slaDeadline = new Date(Date.now() + slaHours * 60 * 60 * 1000);
@@ -83,18 +101,26 @@ router.post(
         reportId,
         location: {
           type: 'Point',
-          coordinates: [lng, lat],
+          coordinates: [longitude, latitude],
         },
         ward: ward ? ward._id : undefined,
+        address,
         photos: { before: beforePhotos },
         description,
         status: 'open',
-        reportedBy: req.auth.sub,
+        reportedBy: req.auth?.sub,
         upvotes: 1,
         slaDeadline,
         escalationLevel: 0,
       });
       await ticket.save();
+
+      if (req.auth?.sub && (deviceId || fcmToken)) {
+        await User.findByIdAndUpdate(req.auth.sub, {
+          ...(deviceId ? { deviceId } : {}),
+          ...(fcmToken ? { fcmToken } : {}),
+        });
+      }
 
       if (ward && ward.assignedEngineer) {
         const engineer = await User.findById(ward.assignedEngineer);
@@ -110,6 +136,7 @@ router.post(
 
       res.status(201).json({
         reportId,
+        ticketId: ticket._id,
         isDuplicate: false,
         ward: ward ? ward.name : null,
         slaDeadline,
@@ -137,9 +164,12 @@ router.get('/:reportId', async (req, res, next) => {
   }
 });
 
-router.post('/:id/upvote', requireRole('citizen'), async (req, res, next) => {
+router.post('/:id/upvote', optionalAuth, async (req, res, next) => {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const lookup = req.params.id.match(/^[a-f\d]{24}$/i)
+      ? { _id: req.params.id }
+      : { reportId: req.params.id };
+    const ticket = await Ticket.findOne(lookup);
     if (!ticket) {
       return res.status(404).json({ error: 'Report not found' });
     }

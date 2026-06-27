@@ -15,10 +15,13 @@ import EscalationsScreen from '../screens/admin/EscalationsScreen';
 
 const Stack = createStackNavigator();
 
-const CitizenStack = () => (
+const CitizenStack = ({ onLogin }) => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Report" component={ReportScreen} />
     <Stack.Screen name="Track" component={TrackScreen} />
+    <Stack.Screen name="Login">
+      {(props) => <LoginScreen {...props} onLogin={onLogin} />}
+    </Stack.Screen>
   </Stack.Navigator>
 );
 
@@ -75,18 +78,20 @@ const RoleNavigator = () => {
     <NavigationContainer>
       {role === 'guest' && (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Report" component={ReportScreen} />
+          <Stack.Screen name="Track" component={TrackScreen} />
           <Stack.Screen name="Login">
             {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
           </Stack.Screen>
         </Stack.Navigator>
       )}
       {role === 'citizen' && (
-        <CitizenStack />
+        <CitizenStack onLogin={handleLogin} />
       )}
       {role === 'worker' && (
         <WorkerStack />
       )}
-      {role === 'admin' && (
+      {['engineer', 'supervisor', 'commissioner', 'admin'].includes(role) && (
         <AdminStack />
       )}
     </NavigationContainer>

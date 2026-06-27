@@ -21,12 +21,19 @@ const LoginScreen = ({ onLogin }) => {
   const [name, setName] = useState('');
 
   const handleSubmit = async () => {
-    if (!email || !password) {
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+
+    if (!trimmedEmail || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
-    if (isRegister && !name) {
+    if (isRegister && !trimmedName) {
       Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    if (isRegister && password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
       return;
     }
 
@@ -34,16 +41,26 @@ const LoginScreen = ({ onLogin }) => {
     try {
       let response;
       if (isRegister) {
-        response = await api.post('/auth/register', { name, email, password });
+        response = await api.post('/auth/register', {
+          name: trimmedName,
+          email: trimmedEmail,
+          password,
+        });
       } else {
-        response = await api.post('/auth/login', { email, password });
+        response = await api.post('/auth/login', {
+          email: trimmedEmail,
+          password,
+        });
       }
 
       const { token } = response.data;
       await AsyncStorage.setItem('jwt_token', token);
       onLogin(token);
     } catch (err) {
+      console.log('Auth request failed', err.response?.data || err.message);
+      const details = err.response?.data?.details;
       const message =
+        (Array.isArray(details) && details.map((detail) => detail.message).join('\n')) ||
         err.response?.data?.error || 'Something went wrong. Please try again.';
       Alert.alert('Error', message);
     } finally {

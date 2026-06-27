@@ -69,10 +69,16 @@ const ResolveScreen = ({ route, navigation }) => {
         await addToQueue({
           method: 'patch',
           url: `/tickets/${ticket._id}/status`,
-          data: {
-            status: 'resolved',
-            afterPhoto: afterPhoto.uri,
-          },
+          multipart: [
+            {
+              name: 'afterPhoto',
+              uri: afterPhoto.uri,
+              type: 'image/jpeg',
+              fileName: 'resolved.jpg',
+            },
+          ],
+          params: { status: 'resolved' },
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
         Alert.alert(
           'Offline',

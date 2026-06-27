@@ -14,6 +14,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import api from '../../services/api';
+import { addToQueue } from '../../services/offlineQueue';
 
 const ReportScreen = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
@@ -92,8 +93,40 @@ const ReportScreen = ({ navigation }) => {
 
       setPhoto(null);
       setDescription('');
+      navigation.navigate('Track', { initialReportId: reportId });
     } catch (err) {
-      const message = err.response?.data?.error || 'Failed to submit report';
+      if (!err.response) {
+        const multipart = [
+          {
+            name: 'photos',
+            uri: photo.uri,
+            type: 'image/jpeg',
+            fileName: 'pothole.jpg',
+          },
+          { name: 'lat', value: location.latitude },
+          { name: 'lng', value: location.longitude },
+        ];
+        if (description) {
+          multipart.push({ name: 'description', value: description });
+        }
+
+        await addToQueue({
+          method: 'post',
+          url: '/reports',
+          multipart,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        Alert.alert('Saved offline', 'The report will be submitted when the device reconnects.');
+        setPhoto(null);
+        setDescription('');
+        return;
+      }
+
+      console.log('Report submit failed', err.response?.data || err.message);
+      const details = err.response?.data?.details;
+      const message =
+        (Array.isArray(details) && details.map((detail) => detail.message).join('\n')) ||
+        err.response?.data?.error || 'Failed to submit report';
       Alert.alert('Error', message);
     } finally {
       setLoading(false);
@@ -124,6 +157,12 @@ const ReportScreen = ({ navigation }) => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Report a Pothole</Text>
+      <TouchableOpacity style={styles.trackButton} onPress={() => navigation.navigate('Track')}>
+        <Text style={styles.trackText}>Track existing report</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.loginLink} onPress={() => navigation.navigate('Login')}>
+        <Text style={styles.loginText}>Staff sign in</Text>
+      </TouchableOpacity>
 
       {photo ? (
         <View style={styles.photoPreview}>
@@ -195,6 +234,28 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 16,
     marginTop: Platform.OS === 'ios' ? 60 : 16,
+  },
+  trackButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e8f0fe',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  trackText: {
+    color: '#1a73e8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loginLink: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  loginText: {
+    color: '#555',
+    fontSize: 13,
+    fontWeight: '600',
   },
   cameraContainer: {
     height: 350,

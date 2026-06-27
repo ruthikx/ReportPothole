@@ -74,7 +74,10 @@ const upload = multer({
 const generatePresignedUrl = async (s3Key) => {
   if (!s3Key) return null;
   if (!useS3) {
-    return `/uploads/${path.basename(s3Key)}`;
+    const normalized = s3Key.replace(/\\/g, '/');
+    if (normalized.startsWith('/uploads/')) return normalized;
+    if (normalized.startsWith('uploads/')) return `/${normalized}`;
+    return `/uploads/${path.basename(normalized)}`;
   }
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET,

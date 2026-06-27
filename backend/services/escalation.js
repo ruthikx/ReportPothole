@@ -1,12 +1,21 @@
 const Ticket = require('../models/Ticket');
 const User = require('../models/User');
-const { sendPushNotification, sendSms } = require('./notifications');
+const { notify } = require('./notifications');
 
 const ESCALATION_LEVELS = {
-  0: { role: 'worker', label: 'Supervisor' },
-  1: { role: 'worker', label: 'Engineer Officer' },
-  2: { role: 'admin', label: 'Commissioner' },
-  3: { role: 'admin', label: 'Commissioner' },
+  1: { roles: ['supervisor'], label: 'Supervisor', channels: ['fcm', 'sms', 'email'] },
+  2: { roles: ['engineer'], label: 'Engineer Officer', channels: ['sms', 'email'] },
+  3: { roles: ['commissioner', 'admin'], label: 'Commissioner', channels: ['sms', 'email'] },
+};
+
+const escalationMatchFor = (ticket, levelConfig) => {
+  const match = { role: { $in: levelConfig.roles } };
+
+  if (ticket.ward && levelConfig.roles.includes('supervisor')) {
+    match.$or = [{ ward: ticket.ward._id }, { ward: { $exists: false } }];
+  }
+
+  return match;
 };
 
 const runEscalationJob = async () => {
@@ -23,42 +32,18 @@ const runEscalationJob = async () => {
   for (const ticket of overdueTickets) {
     try {
       const newLevel = Math.min(ticket.escalationLevel + 1, 3);
+      const levelConfig = ESCALATION_LEVELS[newLevel];
+
       ticket.escalationLevel = newLevel;
       await ticket.save();
 
-      const levelConfig = ESCALATION_LEVELS[newLevel];
-      const officers = await User.find({
-        role: levelConfig.role,
-        ward: ticket.ward ? ticket.ward._id : { $exists: true },
-      });
-
+      const officers = await User.find(escalationMatchFor(ticket, levelConfig));
       for (const officer of officers) {
-        const message = `URGENT: Pothole ticket ${ticket.reportId} is overdue. Escalation Level ${newLevel} — ${levelConfig.label} notified.`;
-
-        if (officer.fcmToken) {
-          await sendPushNotification(
-            officer.fcmToken,
-            `Escalation Level ${newLevel}: ${ticket.reportId}`,
-            message,
-            { ticketId: ticket._id.toString(), reportId: ticket.reportId }
-          );
-        }
-
-        if (officer.phone) {
-          await sendSms(officer.phone, message);
-        }
-      }
-
-      if (newLevel >= 3) {
-        const admins = await User.find({ role: 'admin' });
-        for (const admin of admins) {
-          await sendPushNotification(
-            admin.fcmToken,
-            `Max Escalation: ${ticket.reportId}`,
-            `Ticket ${ticket.reportId} has reached maximum escalation level. Immediate action required.`,
-            { ticketId: ticket._id.toString(), reportId: ticket.reportId }
-          );
-        }
+        await notify(officer, {
+          title: `Escalation L${newLevel}: ${ticket.reportId}`,
+          body: `Pothole ticket ${ticket.reportId} is overdue. ${levelConfig.label} review is required.`,
+          channels: levelConfig.channels,
+        });
       }
 
       console.log(`[Escalation] Escalated ${ticket.reportId} to level ${newLevel}`);
@@ -68,4 +53,4 @@ const runEscalationJob = async () => {
   }
 };
 
-module.exports = { runEscalationJob };
+module.exports = { runEscalationJob, ESCALATION_LEVELS };

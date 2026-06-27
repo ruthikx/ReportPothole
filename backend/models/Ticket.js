@@ -23,6 +23,11 @@ const ticketSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Ward',
     },
+    address: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
     photos: {
       before: [{ type: String }],
       after: [{ type: String }],
@@ -44,7 +49,6 @@ const ticketSchema = new mongoose.Schema(
     reportedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
     },
     duplicateOf: {
       type: mongoose.Schema.Types.ObjectId,

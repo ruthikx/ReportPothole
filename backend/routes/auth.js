@@ -5,10 +5,11 @@ const { validate } = require('../middleware/validate');
 const { registerSchema, loginSchema, refreshSchema } = require('../schemas/auth');
 
 const router = express.Router();
+const jwtSecret = () => process.env.JWT_SECRET || 'potholetrack-dev-secret-change-me';
 
 router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
-    const { name, email, phone, password } = req.body;
+    const { name, email, phone, password, role, ward, fcmToken, deviceId } = req.body;
 
     const existing = await User.findOne({ email });
     if (existing) {
@@ -19,20 +20,30 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
       name,
       email,
       phone,
-      role: 'citizen',
+      role: role || 'citizen',
+      ward,
+      fcmToken,
+      deviceId,
       passwordHash: password,
     });
     await user.save();
 
     const token = jwt.sign(
       { sub: user._id, role: user.role },
-      process.env.JWT_SECRET,
+      jwtSecret(),
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
     res.status(201).json({
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        ward: user.ward,
+      },
     });
   } catch (err) {
     next(err);
@@ -55,13 +66,20 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
 
     const token = jwt.sign(
       { sub: user._id, role: user.role },
-      process.env.JWT_SECRET,
+      jwtSecret(),
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
     res.json({
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        ward: user.ward,
+      },
     });
   } catch (err) {
     next(err);
@@ -72,7 +90,7 @@ router.post('/refresh', validate(refreshSchema), async (req, res, next) => {
   try {
     const { token } = req.body;
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
+    const decoded = jwt.verify(token, jwtSecret(), { ignoreExpiration: true });
     const user = await User.findById(decoded.sub);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -80,7 +98,7 @@ router.post('/refresh', validate(refreshSchema), async (req, res, next) => {
 
     const newToken = jwt.sign(
       { sub: user._id, role: user.role },
-      process.env.JWT_SECRET,
+      jwtSecret(),
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 

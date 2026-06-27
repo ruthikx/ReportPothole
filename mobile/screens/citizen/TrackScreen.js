@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,14 +19,16 @@ const STATUS_COLORS = {
   resolved: '#10b981',
 };
 
-const TrackScreen = ({ navigation }) => {
-  const [reportId, setReportId] = useState('');
+const TrackScreen = ({ route }) => {
+  const initialReportId = route.params?.initialReportId || '';
+  const [reportId, setReportId] = useState(initialReportId);
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const handleTrack = async () => {
-    if (!reportId.trim()) {
+  const handleTrack = async (overrideReportId) => {
+    const lookupReportId = (overrideReportId || reportId).trim();
+    if (!lookupReportId) {
       Alert.alert('Error', 'Please enter a report ID');
       return;
     }
@@ -34,7 +36,7 @@ const TrackScreen = ({ navigation }) => {
     setLoading(true);
     setSearched(true);
     try {
-      const response = await api.get(`/reports/${reportId.trim()}`);
+      const response = await api.get(`/reports/${lookupReportId}`);
       setTicket(response.data);
     } catch (err) {
       if (err.response?.status === 404) {
@@ -47,6 +49,13 @@ const TrackScreen = ({ navigation }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (initialReportId) {
+      handleTrack(initialReportId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialReportId]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
