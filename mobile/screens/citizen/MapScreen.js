@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     position: 'absolute',
     right: 14,
-    top: 12,
+    top: 30,
   },
   title: {
     color: '#1D160F',

@@ -304,6 +304,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
+    marginTop: 16,
   },
   kicker: {
     color: '#F25022',

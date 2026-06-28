@@ -196,6 +196,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
+    marginTop: 16,
     marginBottom: 16,
   },
   avatar: {

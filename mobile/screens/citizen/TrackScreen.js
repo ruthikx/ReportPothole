@@ -162,6 +162,7 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     marginBottom: 16,
+    marginTop: 16,
   },
   title: {
     color: '#1D160F',
