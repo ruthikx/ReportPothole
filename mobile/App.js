@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar } from 'react-native';
 import RoleNavigator from './navigation/RoleNavigator';
 import { setupOfflineListener } from './services/offlineQueue';
 
@@ -13,7 +13,7 @@ export default function App() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF8F1" />
       <RoleNavigator />
     </>
   );

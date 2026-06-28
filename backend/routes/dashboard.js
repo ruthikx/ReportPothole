@@ -150,7 +150,7 @@ router.get('/status/:reportId', async (req, res, next) => {
 
     const history = await listTicketEvents(ticket._id);
 
-    res.json(serializePublicReport(ticket, history));
+    res.json(await serializePublicReport(ticket, history));
   } catch (err) {
     next(err);
   }

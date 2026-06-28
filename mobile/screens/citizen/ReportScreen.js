@@ -9,11 +9,11 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { addToQueue, flushQueue, getQueueSummary } from '../../services/offlineQueue';
 
@@ -116,7 +116,7 @@ const ReportScreen = ({ navigation }) => {
 
       setPhoto(null);
       setDescription('');
-      navigation.navigate('Track', { initialReportId: reportId });
+      navigation.navigate('ProfileTab', { submittedReportId: reportId });
     } catch (err) {
       if (!err.response) {
         const multipart = [
@@ -161,7 +161,7 @@ const ReportScreen = ({ navigation }) => {
   if (!permission || hasLocationPermission === null) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#1a73e8" />
+        <ActivityIndicator size="large" color="#F25022" />
       </View>
     );
   }
@@ -172,7 +172,7 @@ const ReportScreen = ({ navigation }) => {
       <View style={styles.container}>
         <Text style={styles.message}>Camera permission is required</Text>
         <TouchableOpacity style={styles.submitButton} onPress={requestPermission}>
-          <Text style={styles.submitText}>Grant Camera Permission</Text>
+          <Text style={styles.submitText}>Grant Camera</Text>
         </TouchableOpacity>
       </View>
     );
@@ -180,13 +180,25 @@ const ReportScreen = ({ navigation }) => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Report a Pothole</Text>
-      <TouchableOpacity style={styles.trackButton} onPress={() => navigation.navigate('Track')}>
-        <Text style={styles.trackText}>Track existing report</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.loginLink} onPress={() => navigation.navigate('Login')}>
-        <Text style={styles.loginText}>Staff sign in</Text>
-      </TouchableOpacity>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.kicker}>New report</Text>
+          <Text style={styles.title}>Report a Pothole</Text>
+        </View>
+        <TouchableOpacity style={styles.trackIconButton} onPress={() => navigation.navigate('Track')}>
+          <Ionicons name="search" size={20} color="#1D160F" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.heroCard}>
+        <View style={styles.heroIcon}>
+          <Ionicons name="camera" size={24} color="#FFFFFF" />
+        </View>
+        <Text style={styles.heroTitle}>Capture the pothole clearly</Text>
+        <Text style={styles.heroText}>
+          Location is attached automatically when you submit.
+        </Text>
+      </View>
 
       {queueSummary.total > 0 && (
         <View style={styles.queueCard}>
@@ -212,7 +224,8 @@ const ReportScreen = ({ navigation }) => {
         <View style={styles.photoPreview}>
           <Image source={{ uri: photo.uri }} style={styles.previewImage} />
           <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
-            <Text style={styles.retakeText}>Retake Photo</Text>
+            <Ionicons name="refresh" size={18} color="#FFFFFF" />
+            <Text style={styles.retakeText}>Retake</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -224,7 +237,7 @@ const ReportScreen = ({ navigation }) => {
           >
             <View style={styles.cameraControls}>
               <TouchableOpacity style={styles.flipButton} onPress={toggleFacing}>
-                <Text style={styles.flipText}>Flip</Text>
+                <Ionicons name="camera-reverse" size={22} color="#FFFFFF" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
                 <View style={styles.captureInner} />
@@ -236,7 +249,8 @@ const ReportScreen = ({ navigation }) => {
 
       <TextInput
         style={styles.input}
-        placeholder="Describe the pothole (optional)"
+        placeholder="Add a short description"
+        placeholderTextColor="#9D8F83"
         value={description}
         onChangeText={setDescription}
         multiline
@@ -244,9 +258,12 @@ const ReportScreen = ({ navigation }) => {
       />
 
       {location && (
-        <Text style={styles.locationText}>
-          Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-        </Text>
+        <View style={styles.locationPill}>
+          <Ionicons name="location" size={16} color="#F25022" />
+          <Text style={styles.locationText}>
+            {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+          </Text>
+        </View>
       )}
 
       <TouchableOpacity
@@ -257,8 +274,16 @@ const ReportScreen = ({ navigation }) => {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.submitText}>Submit Report</Text>
+          <>
+            <Ionicons name="send" size={18} color="#FFFFFF" />
+            <Text style={styles.submitText}>Submit Report</Text>
+          </>
         )}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.staffLink} onPress={() => navigation.navigate('Login')}>
+        <Ionicons name="person-circle-outline" size={18} color="#5D5147" />
+        <Text style={styles.staffText}>Staff sign in</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -267,43 +292,85 @@ const ReportScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#FFF8F1',
   },
   content: {
-    padding: 16,
+    paddingBottom: 112,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  headerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  kicker: {
+    color: '#F25022',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-    marginTop: Platform.OS === 'ios' ? 60 : 16,
+    color: '#1D160F',
+    fontSize: 26,
+    fontWeight: '900',
   },
-  trackButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e8f0fe',
+  trackIconButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#EFE3D8',
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
   },
-  trackText: {
-    color: '#1a73e8',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  loginLink: {
-    alignSelf: 'flex-start',
+  heroCard: {
+    alignItems: 'center',
+    backgroundColor: '#BA4B00',
+    borderRadius: 8,
     marginBottom: 16,
+    minHeight: 116,
+    padding: 16,
   },
-  loginText: {
-    color: '#555',
+  heroIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 8,
+    height: 44,
+    justifyContent: 'center',
+    marginBottom: 8,
+    width: 44,
+  },
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  heroText: {
+    color: '#FFE3C2',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  staffLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 16,
+  },
+  staffText: {
+    color: '#5D5147',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   queueCard: {
     backgroundColor: '#fff',
-    borderLeftColor: '#f59e0b',
+    borderLeftColor: '#F25022',
     borderLeftWidth: 4,
     borderRadius: 8,
     padding: 12,
@@ -316,17 +383,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   queueTitle: {
-    color: '#333',
+    color: '#1D160F',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   queueAction: {
-    color: '#1a73e8',
+    color: '#F25022',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   queueText: {
-    color: '#555',
+    color: '#5D5147',
     fontSize: 13,
   },
   queueError: {
@@ -335,8 +402,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cameraContainer: {
-    height: 350,
-    borderRadius: 12,
+    height: 330,
+    borderRadius: 8,
     overflow: 'hidden',
     marginBottom: 16,
   },
@@ -365,18 +432,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   flipButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 8,
+    height: 42,
+    justifyContent: 'center',
     position: 'absolute',
     top: 20,
     right: 20,
-  },
-  flipText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    width: 42,
   },
   photoPreview: {
-    height: 350,
-    borderRadius: 12,
+    height: 330,
+    borderRadius: 8,
     overflow: 'hidden',
     marginBottom: 16,
   },
@@ -384,6 +452,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   retakeButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
     position: 'absolute',
     bottom: 16,
     alignSelf: 'center',
@@ -399,25 +470,43 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#EFE3D8',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    color: '#1D160F',
+    fontSize: 15,
     marginBottom: 12,
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  locationText: {
-    color: '#666',
-    fontSize: 13,
+  locationPill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#EFE3D8',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
     marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  locationText: {
+    color: '#5D5147',
+    fontSize: 13,
+    fontWeight: '700',
   },
   submitButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    paddingVertical: 14,
     alignItems: 'center',
+    backgroundColor: '#F25022',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingVertical: 14,
   },
   disabled: {
     opacity: 0.7,
@@ -425,13 +514,13 @@ const styles = StyleSheet.create({
   submitText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '900',
   },
   message: {
     textAlign: 'center',
     marginTop: 100,
     fontSize: 16,
-    color: '#666',
+    color: '#5D5147',
     marginBottom: 20,
   },
 });

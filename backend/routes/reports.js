@@ -225,6 +225,93 @@ router.post(
   }
 );
 
+router.get('/', optionalAuth, async (req, res, next) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (req.query.mine === 'true') {
+      if (!req.auth?.sub) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      filter.reportedBy = req.auth.sub;
+    }
+    if (req.query.status) {
+      const statuses = String(req.query.status)
+        .split(',')
+        .map((status) => status.trim())
+        .filter(Boolean);
+      if (statuses.length === 1) {
+        filter.status = statuses[0];
+      } else if (statuses.length > 1) {
+        filter.status = { $in: statuses };
+      }
+    }
+
+    const [tickets, total] = await Promise.all([
+      Ticket.find(filter)
+        .populate('ward', 'name')
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Ticket.countDocuments(filter),
+    ]);
+
+    const reports = await Promise.all(
+      tickets.map((ticket) => serializePublicReport(ticket))
+    );
+
+    res.json({
+      reports,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/mine', requireRole('citizen'), async (req, res, next) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const [tickets, total] = await Promise.all([
+      Ticket.find({ reportedBy: req.auth.sub })
+        .populate('ward', 'name')
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Ticket.countDocuments({ reportedBy: req.auth.sub }),
+    ]);
+
+    const reports = await Promise.all(
+      tickets.map((ticket) => serializePublicReport(ticket))
+    );
+
+    res.json({
+      reports,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/:reportId', async (req, res, next) => {
   try {
     const ticket = await Ticket.findOne({ reportId: req.params.reportId })
@@ -237,7 +324,7 @@ router.get('/:reportId', async (req, res, next) => {
 
     const history = await listTicketEvents(ticket._id);
 
-    res.json(serializePublicReport(ticket, history));
+    res.json(await serializePublicReport(ticket, history));
   } catch (err) {
     next(err);
   }

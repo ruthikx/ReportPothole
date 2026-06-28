@@ -1,9 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 const request = require('supertest');
 const sharp = require('sharp');
 const { app } = require('../server');
 const Ticket = require('../models/Ticket');
+const User = require('../models/User');
 
 const testUploadPath = path.join(
   __dirname,
@@ -56,6 +58,41 @@ const postReport = async ({
       contentType,
     })
     .expect(expectedStatus);
+};
+
+const tokenFor = (user) => jwt.sign(
+  { sub: user._id, role: user.role },
+  process.env.JWT_SECRET,
+  { expiresIn: '1h' }
+);
+
+const createUser = async (overrides = {}) => {
+  const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return User.create({
+    name: overrides.name || `Citizen ${unique}`,
+    email: overrides.email || `citizen-${unique}@example.com`,
+    role: overrides.role || 'citizen',
+    passwordHash: overrides.password || 'password123',
+  });
+};
+
+const createTicket = async (overrides = {}) => {
+  const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return Ticket.create({
+    reportId: overrides.reportId || `RPT-${unique}`,
+    location: {
+      type: 'Point',
+      coordinates: overrides.coordinates || [77.5946, 12.9716],
+    },
+    address: overrides.address,
+    photos: overrides.photos || { before: ['uploads/00000000-0000-4000-8000-000000000000.png'] },
+    description: overrides.description || 'Reported from test',
+    status: overrides.status || 'open',
+    reportedBy: overrides.reportedBy,
+    upvotes: overrides.upvotes || 1,
+    slaDeadline: overrides.slaDeadline || new Date(Date.now() + 60 * 60 * 1000),
+    escalationLevel: overrides.escalationLevel || 0,
+  });
 };
 
 describe('report duplicate detection', () => {
@@ -151,5 +188,93 @@ describe('report duplicate detection', () => {
       saveSpy.mockRestore();
       errorSpy.mockRestore();
     }
+  });
+
+  test('public report feed returns report cards with location and thumbnail data', async () => {
+    const older = await createTicket({
+      reportId: 'RPT-OLDER',
+      coordinates: [72.5714, 23.0225],
+      address: 'Old City Road',
+      description: 'Deep pothole near the bus stop',
+      upvotes: 4,
+    });
+    const newer = await createTicket({
+      reportId: 'RPT-NEWER',
+      coordinates: [72.5800, 23.0300],
+      address: 'Ring Road',
+      description: 'Fresh report',
+      upvotes: 2,
+    });
+
+    const response = await request(app)
+      .get('/api/v1/reports')
+      .expect(200);
+
+    expect(response.body.pagination.total).toBe(2);
+    expect(response.body.reports.map((report) => report.reportId)).toEqual([
+      newer.reportId,
+      older.reportId,
+    ]);
+    expect(response.body.reports[0]).toMatchObject({
+      reportId: newer.reportId,
+      trackingId: newer.reportId,
+      statusLabel: 'Pending',
+      locationName: 'Ring Road',
+      location: {
+        latitude: 23.03,
+        longitude: 72.58,
+      },
+      thumbnailUrl: '/uploads/00000000-0000-4000-8000-000000000000.png',
+      upvotes: 2,
+    });
+  });
+
+  test('authenticated profile feed only returns reports submitted by the user', async () => {
+    const citizen = await createUser({ email: 'mine@example.com' });
+    const other = await createUser({ email: 'other@example.com' });
+    const mine = await createTicket({
+      reportId: 'RPT-MINE',
+      reportedBy: citizen._id,
+      status: 'in_progress',
+    });
+    await createTicket({
+      reportId: 'RPT-OTHER',
+      reportedBy: other._id,
+    });
+
+    const response = await request(app)
+      .get('/api/v1/reports/mine')
+      .set('Authorization', `Bearer ${tokenFor(citizen)}`)
+      .expect(200);
+
+    expect(response.body.reports).toHaveLength(1);
+    expect(response.body.reports[0]).toMatchObject({
+      reportId: mine.reportId,
+      status: 'in_progress',
+      statusLabel: 'In Review',
+    });
+  });
+
+  test('upvote endpoint updates community feed counts', async () => {
+    const ticket = await createTicket({
+      reportId: 'RPT-UPVOTE',
+      upvotes: 1,
+    });
+
+    await request(app)
+      .post(`/api/v1/reports/${ticket.reportId}/upvote`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.upvotes).toBe(2);
+      });
+
+    const response = await request(app)
+      .get('/api/v1/reports')
+      .expect(200);
+
+    expect(response.body.reports[0]).toMatchObject({
+      reportId: ticket.reportId,
+      upvotes: 2,
+    });
   });
 });
