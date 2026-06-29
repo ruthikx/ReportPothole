@@ -8,9 +8,13 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const STATUS_COLORS = {
   open: '#f59e0b',
@@ -21,7 +25,7 @@ const STATUS_COLORS = {
 
 const STATUS_OPTIONS = ['', 'open', 'assigned', 'in_progress', 'resolved'];
 
-const AllTicketsScreen = ({ navigation }) => {
+const AllTicketsScreen = ({ navigation, onLogout }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,6 +89,23 @@ const AllTicketsScreen = ({ navigation }) => {
 
   const isOverdue = (deadline) => {
     return deadline && new Date(deadline) < new Date();
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Sign out', 'Sign out of the admin console?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await AsyncStorage.removeItem('jwt_token');
+          } finally {
+            onLogout?.();
+          }
+        },
+      },
+    ]);
   };
 
   const renderTicket = ({ item }) => (
@@ -152,8 +173,18 @@ const AllTicketsScreen = ({ navigation }) => {
   }
 
   return (
+    <SafeAreaView style={{ flex: 1 }}>
     <View style={styles.container}>
-      <Text style={styles.title}>All Tickets</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>All Tickets</Text>
+        <TouchableOpacity
+          accessibilityLabel="Sign out"
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          <Ionicons name="log-out-outline" size={22} color="#333" />
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.filters}>
         <View style={styles.filterRow}>
@@ -256,6 +287,7 @@ const AllTicketsScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
     </View>
+    </SafeAreaView>
   );
 };
 
@@ -269,13 +301,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 16,
+    paddingBottom: 8,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 16,
-    paddingBottom: 8,
+  },
+  logoutButton: {
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderColor: '#ddd',
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
   },
   filters: {
     paddingHorizontal: 16,

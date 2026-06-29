@@ -120,16 +120,20 @@ const CitizenStack = ({ onLogin, onLogout, isAuthenticated }) => (
   </Stack.Navigator>
 );
 
-const WorkerStack = () => (
+const WorkerStack = ({ onLogout }) => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
+    <Stack.Screen name="MyTickets">
+      {(props) => <MyTicketsScreen {...props} onLogout={onLogout} />}
+    </Stack.Screen>
     <Stack.Screen name="Resolve" component={ResolveScreen} />
   </Stack.Navigator>
 );
 
-const AdminStack = () => (
+const AdminStack = ({ onLogout }) => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="AllTickets" component={AllTicketsScreen} />
+    <Stack.Screen name="AllTickets">
+      {(props) => <AllTicketsScreen {...props} onLogout={onLogout} />}
+    </Stack.Screen>
     <Stack.Screen name="Assign" component={AssignScreen} />
     <Stack.Screen name="Escalations" component={EscalationsScreen} />
   </Stack.Navigator>
@@ -179,10 +183,10 @@ const RoleNavigator = () => {
         />
       )}
       {role === 'worker' && (
-        <WorkerStack />
+        <WorkerStack onLogout={handleLogout} />
       )}
       {['engineer', 'supervisor', 'commissioner', 'admin'].includes(role) && (
-        <AdminStack />
+        <AdminStack onLogout={handleLogout} />
       )}
     </NavigationContainer>
   );

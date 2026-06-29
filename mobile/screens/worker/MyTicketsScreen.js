@@ -8,10 +8,14 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { flushQueue, getQueueSummary } from '../../services/offlineQueue';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const STATUS_COLORS = {
   open: '#f59e0b',
@@ -20,7 +24,7 @@ const STATUS_COLORS = {
   resolved: '#10b981',
 };
 
-const MyTicketsScreen = ({ navigation }) => {
+const MyTicketsScreen = ({ navigation, onLogout }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +71,23 @@ const MyTicketsScreen = ({ navigation }) => {
   const handleRetryQueue = async () => {
     await flushQueue();
     await refreshQueueSummary();
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Sign out', 'Sign out of the worker app?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await AsyncStorage.removeItem('jwt_token');
+          } finally {
+            onLogout?.();
+          }
+        },
+      },
+    ]);
   };
 
   const getSlaCountdown = (deadline) => {
@@ -139,8 +160,18 @@ const MyTicketsScreen = ({ navigation }) => {
   }
 
   return (
+    <SafeAreaView style={{ flex: 1 }}>
     <View style={styles.container}>
-      <Text style={styles.title}>My Work Tickets</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>My Work Tickets</Text>
+        <TouchableOpacity
+          accessibilityLabel="Sign out"
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          <Ionicons name="log-out-outline" size={22} color="#333" />
+        </TouchableOpacity>
+      </View>
       {queueSummary.total > 0 && (
         <View style={styles.queueCard}>
           <View style={styles.queueHeader}>
@@ -173,6 +204,7 @@ const MyTicketsScreen = ({ navigation }) => {
         }
       />
     </View>
+    </SafeAreaView>
   );
 };
 
@@ -186,12 +218,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 16,
+  },
   title: {
+    flex: 1,
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 16,
+  },
+  logoutButton: {
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderColor: '#ddd',
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
   },
   queueCard: {
     backgroundColor: '#fff',
