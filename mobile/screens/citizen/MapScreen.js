@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import ReportCard, { STATUS_META } from '../../components/ReportCard';
@@ -311,6 +311,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   topBar: {
+
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#EFE3D8',
@@ -323,7 +324,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     position: 'absolute',
     right: 14,
-    top: 30,
   },
   title: {
     color: '#1D160F',

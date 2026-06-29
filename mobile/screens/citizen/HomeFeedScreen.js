@@ -4,12 +4,12 @@ import {
   Alert,
   FlatList,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ReportCard from '../../components/ReportCard';
 import { fetchCommunityReports, upvoteReport } from '../../services/reports';
@@ -165,7 +165,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 80,
     paddingHorizontal: 16,
-    paddingTop: 30,
   },
   header: {
     marginBottom: 2,

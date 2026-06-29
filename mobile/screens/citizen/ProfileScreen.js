@@ -4,12 +4,12 @@ import {
   Alert,
   FlatList,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import ReportCard from '../../components/ReportCard';
@@ -190,7 +190,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 104,
     paddingHorizontal: 16,
-    paddingTop: 14,
   },
   header: {
     alignItems: 'center',
