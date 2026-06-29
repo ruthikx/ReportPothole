@@ -135,6 +135,9 @@ router.post(
       if (duplicate) {
         const previousUpvotes = duplicate.upvotes;
         duplicate.upvotes += 1;
+        if (!duplicate.address && address) {
+          duplicate.address = address;
+        }
         await duplicate.save();
         await recordTicketEvent({
           ticketId: duplicate._id,

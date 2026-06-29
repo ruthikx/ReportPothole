@@ -17,12 +17,44 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { addToQueue, flushQueue, getQueueSummary } from '../../services/offlineQueue';
 
+const uniqueParts = (parts) => [
+  ...new Set(
+    parts
+      .map((part) => (part ? String(part).trim() : ''))
+      .filter(Boolean)
+  ),
+];
+
+const formatAddress = (place) => {
+  if (!place) return '';
+
+  const road = place.street || place.name;
+  const area = place.district || place.subregion || place.city;
+  const city = area === place.city ? null : place.city;
+
+  return uniqueParts([road, area, city, place.region])
+    .slice(0, 4)
+    .join(', ');
+};
+
+const reverseGeocode = async ({ latitude, longitude }) => {
+  try {
+    const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+    return formatAddress(place);
+  } catch (err) {
+    console.log('Reverse geocode failed', err.message);
+    return '';
+  }
+};
+
 const ReportScreen = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [hasLocationPermission, setHasLocationPermission] = useState(null);
   const cameraRef = useRef(null);
   const [photo, setPhoto] = useState(null);
   const [location, setLocation] = useState(null);
+  const [locationName, setLocationName] = useState('');
+  const [locationLookupLoading, setLocationLookupLoading] = useState(false);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [facing, setFacing] = useState('back');
@@ -39,15 +71,31 @@ const ReportScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    let active = true;
+
     (async () => {
       const locationStatus = await Location.requestForegroundPermissionsAsync();
+      if (!active) return;
+
       setHasLocationPermission(locationStatus.granted);
 
       if (locationStatus.granted) {
         const loc = await Location.getCurrentPositionAsync({});
+        if (!active) return;
+
         setLocation(loc.coords);
+        setLocationLookupLoading(true);
+        const address = await reverseGeocode(loc.coords);
+        if (!active) return;
+
+        setLocationName(address);
+        setLocationLookupLoading(false);
       }
     })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useFocusEffect(
@@ -99,6 +147,9 @@ const ReportScreen = ({ navigation }) => {
       });
       formData.append('lat', location.latitude.toString());
       formData.append('lng', location.longitude.toString());
+      if (locationName) {
+        formData.append('address', locationName);
+      }
       if (description) {
         formData.append('description', description);
       }
@@ -129,6 +180,9 @@ const ReportScreen = ({ navigation }) => {
           { name: 'lat', value: location.latitude },
           { name: 'lng', value: location.longitude },
         ];
+        if (locationName) {
+          multipart.push({ name: 'address', value: locationName });
+        }
         if (description) {
           multipart.push({ name: 'description', value: description });
         }
@@ -260,9 +314,16 @@ const ReportScreen = ({ navigation }) => {
       {location && (
         <View style={styles.locationPill}>
           <Ionicons name="location" size={16} color="#F25022" />
-          <Text style={styles.locationText}>
-            {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-          </Text>
+          <View style={styles.locationCopy}>
+            <Text style={styles.locationText} numberOfLines={2}>
+              {locationLookupLoading
+                ? 'Finding road and area...'
+                : locationName || 'Location captured'}
+            </Text>
+            <Text style={styles.coordinateText}>
+              {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+            </Text>
+          </View>
         </View>
       )}
 
@@ -482,8 +543,8 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   locationPill: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
+    alignSelf: 'stretch',
     backgroundColor: '#FFFFFF',
     borderColor: '#EFE3D8',
     borderRadius: 8,
@@ -494,10 +555,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  locationCopy: {
+    flex: 1,
+  },
   locationText: {
-    color: '#5D5147',
+    color: '#1D160F',
     fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  coordinateText: {
+    color: '#8B7D72',
+    fontSize: 12,
     fontWeight: '700',
+    marginTop: 2,
   },
   submitButton: {
     alignItems: 'center',

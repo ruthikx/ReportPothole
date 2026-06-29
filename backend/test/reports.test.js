@@ -41,6 +41,7 @@ const postReport = async ({
   color = '#d33',
   deviceId = 'test-device',
   format = 'png',
+  address,
   expectedStatus = 201,
 }) => {
   const image = await createImage(color, format);
@@ -53,6 +54,7 @@ const postReport = async ({
     .field('lng', String(lng))
     .field('description', 'Reported from test')
     .field('deviceId', deviceId)
+    .field('address', address || '')
     .attach('photo', image, {
       filename: `${deviceId}.${extension}`,
       contentType,
@@ -124,6 +126,7 @@ describe('report duplicate detection', () => {
       lng: 77.59465,
       format: 'jpeg',
       deviceId: 'near-second',
+      address: 'MG Road, Central Area',
       expectedStatus: 200,
     });
 
@@ -137,6 +140,7 @@ describe('report duplicate detection', () => {
     const tickets = await Ticket.find({}).lean();
     expect(tickets).toHaveLength(1);
     expect(tickets[0].upvotes).toBe(2);
+    expect(tickets[0].address).toBe('MG Road, Central Area');
     expect(fs.existsSync(testUploadPath)).toBe(true);
     expect(fs.existsSync(testUploadJpegPath)).toBe(false);
   });
