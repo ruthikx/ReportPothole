@@ -182,6 +182,8 @@ const MapScreen = ({ route }) => {
   };
 
   const selectedCoordinate = selectedReport ? getCoordinate(selectedReport) : null;
+  const selectedAfterPhotoUrl = selectedReport?.photoUrls?.after?.[0] || null;
+  const shouldShowAfterPhoto = selectedReport?.status === 'resolved' && selectedAfterPhotoUrl;
 
   // Rebuild HTML whenever reports change
   const leafletHTML = buildLeafletHTML(reports);
@@ -241,11 +243,20 @@ const MapScreen = ({ route }) => {
             </View>
 
             <View style={styles.detailRow}>
-              {selectedReport.thumbnailUrl ? (
-                <Image source={{ uri: selectedReport.thumbnailUrl }} style={styles.sheetImage} />
-              ) : (
-                <View style={styles.sheetImageFallback}>
-                  <Ionicons name="image-outline" size={26} color="#B8AEA4" />
+              <View style={styles.photoColumn}>
+                <Text style={styles.photoLabel}>Before</Text>
+                {selectedReport.thumbnailUrl ? (
+                  <Image source={{ uri: selectedReport.thumbnailUrl }} style={styles.sheetImage} />
+                ) : (
+                  <View style={styles.sheetImageFallback}>
+                    <Ionicons name="image-outline" size={26} color="#B8AEA4" />
+                  </View>
+                )}
+              </View>
+              {shouldShowAfterPhoto && (
+                <View style={styles.photoColumn}>
+                  <Text style={styles.photoLabel}>After</Text>
+                  <Image source={{ uri: selectedAfterPhotoUrl }} style={styles.sheetImage} />
                 </View>
               )}
               <View style={styles.detailCopy}>
@@ -402,19 +413,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  photoColumn: {
+    gap: 5,
+  },
+  photoLabel: {
+    color: '#8B7D72',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
   sheetImage: {
     backgroundColor: '#F2ECE6',
     borderRadius: 8,
-    height: 96,
-    width: 110,
+    height: 86,
+    width: 86,
   },
   sheetImageFallback: {
     alignItems: 'center',
     backgroundColor: '#F2ECE6',
     borderRadius: 8,
-    height: 96,
+    height: 86,
     justifyContent: 'center',
-    width: 110,
+    width: 86,
   },
   detailCopy: {
     flex: 1,
