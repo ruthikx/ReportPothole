@@ -142,6 +142,7 @@ const HomeFeedScreen = ({ navigation }) => {
         renderItem={({ item }) => (
           <ReportCard
             report={item}
+            showStatus
             onPress={() =>
               navigation.navigate('MapTab', {
                 selectedReportId: item.id,
