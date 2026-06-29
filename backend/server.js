@@ -48,6 +48,7 @@ const apiAuth = jwt({
   path: [
     { url: '/auth/register', methods: ['POST'] },
     { url: '/auth/login', methods: ['POST'] },
+    { url: '/auth/admin/login', methods: ['POST'] },
     { url: '/auth/refresh', methods: ['POST'] },
     { url: '/reports', methods: ['GET'] },
     { url: '/reports', methods: ['POST'] },

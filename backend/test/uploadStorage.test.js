@@ -3,7 +3,9 @@ const os = require('os');
 const path = require('path');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const {
+  buildImageKitKey,
   cleanupStoredUploads,
+  generatePresignedUrl,
   getStoredUploadKey,
   resolveLocalUploadPath,
 } = require('../services/uploadStorage');
@@ -101,5 +103,48 @@ describe('upload storage cleanup helpers', () => {
       Bucket: 'pothole-test-bucket',
       Key: 'uploads/unused-s3.jpg',
     });
+  });
+
+  test('stores renderable ImageKit URLs while retaining file ids for cleanup', async () => {
+    const upload = {
+      url: 'https://ik.imagekit.io/demo/pothole-app/uploads/report.jpg',
+      imagekitFileId: 'file_123',
+    };
+
+    expect(getStoredUploadKey(upload)).toBe(
+      'https://ik.imagekit.io/demo/pothole-app/uploads/report.jpg'
+    );
+
+    const deleteMock = jest.fn().mockResolvedValue({});
+    const result = await cleanupStoredUploads([upload], {
+      storageMode: 'imagekit',
+      imageKitClient: {
+        files: {
+          delete: deleteMock,
+        },
+      },
+    });
+
+    expect(result.deleted).toHaveLength(1);
+    expect(result.deleted[0]).toMatchObject({
+      key: 'https://ik.imagekit.io/demo/pothole-app/uploads/report.jpg',
+      storage: 'imagekit',
+      fileId: 'file_123',
+    });
+    expect(deleteMock).toHaveBeenCalledWith('file_123');
+  });
+
+  test('returns ImageKit delivery URLs without signing', async () => {
+    const originalEndpoint = process.env.IMAGEKIT_URL_ENDPOINT;
+    process.env.IMAGEKIT_URL_ENDPOINT = 'https://ik.imagekit.io/demo';
+
+    try {
+      await expect(generatePresignedUrl('/pothole-app/uploads/report.jpg')).resolves.toBe(
+        'https://ik.imagekit.io/demo/pothole-app/uploads/report.jpg'
+      );
+      await expect(generatePresignedUrl(buildImageKitKey('file_123'))).resolves.toBeNull();
+    } finally {
+      process.env.IMAGEKIT_URL_ENDPOINT = originalEndpoint;
+    }
   });
 });

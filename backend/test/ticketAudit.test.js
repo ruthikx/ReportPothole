@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const request = require('supertest');
+const sharp = require('sharp');
 const { app } = require('../server');
 const Ticket = require('../models/Ticket');
 const TicketEvent = require('../models/TicketEvent');
@@ -39,6 +40,15 @@ const createTicket = async (overrides = {}) => {
     escalationLevel: overrides.escalationLevel || 0,
   });
 };
+
+const createImage = () => sharp({
+  create: {
+    width: 4,
+    height: 4,
+    channels: 3,
+    background: '#379683',
+  },
+}).png().toBuffer();
 
 describe('ticket audit history', () => {
   test('assignment writes an audit event and exposes protected history', async () => {
@@ -115,6 +125,30 @@ describe('ticket audit history', () => {
       to: { status: 'in_progress' },
       note: 'Status changed to in_progress.',
     });
+  });
+
+  test('resolution after-photo is stored through the upload helper', async () => {
+    const worker = await createUser({ role: 'worker', email: 'photo-worker@example.com' });
+    const ticket = await createTicket({
+      status: 'assigned',
+      assignedTo: worker._id,
+    });
+    const image = await createImage();
+
+    await request(app)
+      .patch(`/api/v1/tickets/${ticket._id}/status`)
+      .set('Authorization', `Bearer ${tokenFor(worker)}`)
+      .field('status', 'resolved')
+      .attach('afterPhoto', image, {
+        filename: 'resolved.png',
+        contentType: 'image/png',
+      })
+      .expect(200);
+
+    const updatedTicket = await Ticket.findById(ticket._id).lean();
+    expect(updatedTicket.photos.after).toHaveLength(1);
+    expect(updatedTicket.photos.after[0]).toMatch(/^uploads\/.+\.png$/);
+    expect(updatedTicket.imageHashes.after).toHaveLength(1);
   });
 
   test('escalation job writes an audit event', async () => {

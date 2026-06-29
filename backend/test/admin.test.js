@@ -47,7 +47,18 @@ const createWard = async (overrides = {}) => {
 };
 
 describe('admin management routes', () => {
-  test('public register accepts citizen/worker but rejects staff roles', async () => {
+  test('public register creates citizen accounts and rejects staff roles', async () => {
+    const citizenResponse = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        name: 'Citizen Public',
+        email: 'citizen-public@example.com',
+        password: 'password123',
+      })
+      .expect(201);
+
+    expect(citizenResponse.body.user.role).toBe('citizen');
+
     await request(app)
       .post('/api/v1/auth/register')
       .send({
@@ -56,17 +67,36 @@ describe('admin management routes', () => {
         password: 'password123',
         role: 'worker',
       })
-      .expect(201);
+      .expect(400);
+  });
+
+  test('admin login rejects citizens and allows staff users', async () => {
+    const citizen = await createUser({
+      role: 'citizen',
+      email: 'citizen-login@example.com',
+      password: 'password123',
+    });
+    const engineer = await createUser({
+      role: 'engineer',
+      email: 'engineer-login@example.com',
+      password: 'password123',
+    });
 
     await request(app)
-      .post('/api/v1/auth/register')
-      .send({
-        name: 'Admin Public',
-        email: 'admin-public@example.com',
-        password: 'password123',
-        role: 'admin',
-      })
-      .expect(400);
+      .post('/api/v1/auth/admin/login')
+      .send({ email: citizen.email, password: 'password123' })
+      .expect(403);
+
+    const response = await request(app)
+      .post('/api/v1/auth/admin/login')
+      .send({ email: engineer.email, password: 'password123' })
+      .expect(200);
+
+    expect(response.body.token).toBeTruthy();
+    expect(response.body.user).toMatchObject({
+      email: engineer.email,
+      role: 'engineer',
+    });
   });
 
   test('citizens are forbidden from staff and ward management', async () => {

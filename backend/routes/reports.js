@@ -9,8 +9,7 @@ const { findWardByPoint } = require('../services/geoRouter');
 const { dispatchNotification } = require('../services/notificationQueue');
 const { computeImageHash, findDuplicate } = require('../services/duplicateDetect');
 const {
-  cleanupStoredUploads,
-  getStoredUploadIdentifiers,
+  cleanupTicketUploads,
   getStoredUploadKey,
 } = require('../services/uploadStorage');
 const {
@@ -62,28 +61,7 @@ const getUploadedReportFiles = (req) => [
   ...(req.files?.photos || []),
 ];
 
-const isUploadReferencedByTicket = async (upload, key) => {
-  const identifiers = getStoredUploadIdentifiers(upload);
-  if (key) identifiers.push(key);
-
-  const uniqueIdentifiers = [...new Set(identifiers.filter(Boolean))];
-  if (uniqueIdentifiers.length === 0) return false;
-
-  const existingTicket = await Ticket.exists({
-    $or: [
-      { 'photos.before': { $in: uniqueIdentifiers } },
-      { 'photos.after': { $in: uniqueIdentifiers } },
-    ],
-  });
-
-  return Boolean(existingTicket);
-};
-
-const cleanupUploadedReportFiles = async (files) => {
-  await cleanupStoredUploads(files, {
-    isReferenced: (key, upload) => isUploadReferencedByTicket(upload, key),
-  });
-};
+const cleanupUploadedReportFiles = async (files) => cleanupTicketUploads(Ticket, files);
 
 const validateReportBody = async (req, res, next) => {
   const result = createReportSchema.safeParse(req.body);

@@ -154,7 +154,10 @@ Public registration accepts only `citizen` and `worker`. Staff roles (`engineer`
 | `NOTIFICATION_QUEUE_BACKOFF_MS` | No | Exponential backoff delay, default `5000` |
 | `NOTIFICATION_WORKER_CONCURRENCY` | No | BullMQ worker concurrency, default `5` |
 | `ENABLE_NOTIFICATION_WORKER` | No | Allows worker startup while `NODE_ENV=test`; mainly useful for tests |
-| `UPLOAD_STORAGE` | No | Set to `s3` for S3 uploads; otherwise local storage is used unless real S3 credentials are present |
+| `UPLOAD_STORAGE` | No | Set to `imagekit` for ImageKit uploads or `s3` for S3 uploads; otherwise local storage is used unless real S3 credentials are present |
+| `IMAGEKIT_PRIVATE_KEY` | For ImageKit | Private API key for server-side ImageKit uploads |
+| `IMAGEKIT_URL_ENDPOINT` / `IMAGE_KIT_URL_ENDPOINT` | For ImageKit paths | Optional ImageKit delivery endpoint used when stored photo values are relative ImageKit paths |
+| `IMAGEKIT_UPLOAD_FOLDER` | No | ImageKit media library folder, defaults to `/pothole-app/uploads` |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET` | For S3 | S3 upload and cleanup support |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` / `FIREBASE_SA_KEY` | For FCM | Firebase service account JSON string |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` / `TWILIO_FROM_NUMBER` | For SMS | Twilio SMS delivery |
@@ -240,7 +243,7 @@ The implemented `Ticket` model stores:
 }
 ```
 
-Before photos are written during report submission. After photos are written when a worker/staff member updates a ticket status with `afterPhoto`. Image hashes are used for duplicate detection when the upload is local or otherwise readable by the Node process; S3-only metadata is skipped for hashing.
+Before photos are written during report submission. After photos are written when a worker/staff member updates a ticket status with `afterPhoto`. Image hashes are used for duplicate detection when the upload is local or the backend has the uploaded bytes in memory, including ImageKit uploads. S3-only metadata is skipped for hashing.
 
 ## Notification Queue Behavior
 
@@ -267,8 +270,8 @@ Before photos are written during report submission. After photos are written whe
 - There is no public first-admin bootstrap endpoint; create the first staff account through seed data, direct database insertion, or a trusted internal script.
 - Redis-backed report rate limiting is skipped if Redis is not configured or errors. The global Express rate limiter still runs in-process.
 - Ticket status updates require a worker-or-higher role but do not currently verify that a worker is assigned to that specific ticket.
-- S3 upload keys are stored on tickets, but public/mobile UI surfaces mostly show photo presence rather than rendering signed image URLs.
-- Image duplicate detection is unavailable for S3-only uploads unless bytes are available to the backend process; GPS duplicate detection still runs.
+- S3 upload keys are stored on tickets and resolved to signed URLs for public/mobile feeds.
+- Image duplicate detection is unavailable for S3-only uploads unless bytes are available to the backend process; ImageKit uploads keep bytes in memory during request processing, so hashing still runs.
 - Admin Settings is mostly read-only in the Vite UI even though backend staff and ward mutation routes exist.
 - Automated tests exist for the backend only. Admin, dashboard, and mobile currently rely on builds and manual QA.
 - The root package is not configured as an npm workspace and its `npm test` script is a placeholder that exits with failure.

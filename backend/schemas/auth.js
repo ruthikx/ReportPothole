@@ -5,7 +5,7 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   phone: z.string().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters').max(128),
-  role: z.enum(['citizen', 'worker']).optional(),
+  role: z.literal('citizen').optional(),
   ward: z.string().optional(),
   fcmToken: z.string().optional(),
   deviceId: z.string().optional(),

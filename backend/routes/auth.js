@@ -7,10 +7,34 @@ const { registerSchema, loginSchema, refreshSchema, deviceSchema } = require('..
 
 const router = express.Router();
 const jwtSecret = () => process.env.JWT_SECRET || 'potholetrack-dev-secret-change-me';
+const ADMIN_LOGIN_ROLES = ['engineer', 'supervisor', 'commissioner', 'admin'];
+
+const createToken = (user) => jwt.sign(
+  { sub: user._id, role: user.role },
+  jwtSecret(),
+  { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+);
+
+const serializeAuthUser = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  phone: user.phone,
+  role: user.role,
+  ward: user.ward,
+});
+
+const authenticateUser = async (email, password) => {
+  const user = await User.findOne({ email });
+  if (!user) return null;
+
+  const isValid = await user.comparePassword(password);
+  return isValid ? user : null;
+};
 
 router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
-    const { name, email, phone, password, role, ward, fcmToken, deviceId } = req.body;
+    const { name, email, phone, password, ward, fcmToken, deviceId } = req.body;
 
     const existing = await User.findOne({ email });
     if (existing) {
@@ -21,7 +45,7 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
       name,
       email,
       phone,
-      role: role || 'citizen',
+      role: 'citizen',
       ward,
       fcmToken,
       deviceId,
@@ -29,22 +53,9 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
     });
     await user.save();
 
-    const token = jwt.sign(
-      { sub: user._id, role: user.role },
-      jwtSecret(),
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
-
     res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        ward: user.ward,
-      },
+      token: createToken(user),
+      user: serializeAuthUser(user),
     });
   } catch (err) {
     next(err);
@@ -55,32 +66,36 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await authenticateUser(email, password);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const isValid = await user.comparePassword(password);
-    if (!isValid) {
+    res.json({
+      token: createToken(user),
+      user: serializeAuthUser(user),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/admin/login', validate(loginSchema), async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await authenticateUser(email, password);
+    if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign(
-      { sub: user._id, role: user.role },
-      jwtSecret(),
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
+    if (!ADMIN_LOGIN_ROLES.includes(user.role)) {
+      return res.status(403).json({ error: 'This account does not have admin portal access' });
+    }
 
     res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        ward: user.ward,
-      },
+      token: createToken(user),
+      user: serializeAuthUser(user),
     });
   } catch (err) {
     next(err);

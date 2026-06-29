@@ -14,6 +14,21 @@ const NAV_ITEMS = [
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
+const ADMIN_ROLES = ['engineer', 'supervisor', 'commissioner', 'admin'];
+
+const loadStoredAdminUser = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('pothole_admin_user') || 'null');
+    return user && ADMIN_ROLES.includes(user.role) ? user : null;
+  } catch {
+    return null;
+  }
+};
+
+const clearStoredAdminSession = () => {
+  localStorage.removeItem('pothole_admin_token');
+  localStorage.removeItem('pothole_admin_user');
+};
 
 function Login({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -27,11 +42,15 @@ function Login({ onLogin }) {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/login', { email, password });
+      const res = await api.post('/auth/admin/login', { email, password });
+      if (!ADMIN_ROLES.includes(res.data.user?.role)) {
+        throw new Error('This account does not have admin portal access');
+      }
       localStorage.setItem('pothole_admin_token', res.data.token);
+      localStorage.setItem('pothole_admin_user', JSON.stringify(res.data.user));
       onLogin(res.data.user);
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to sign in');
+      setError(err.response?.data?.error || err.message || 'Unable to sign in');
     } finally {
       setLoading(false);
     }
@@ -60,8 +79,13 @@ function Login({ onLogin }) {
 export default function App() {
   const [active, setActive] = useState('queue');
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [user, setUser] = useState(null);
-  const [hasToken, setHasToken] = useState(() => Boolean(localStorage.getItem('pothole_admin_token')));
+  const [user, setUser] = useState(loadStoredAdminUser);
+  const [hasToken, setHasToken] = useState(() => {
+    const storedUser = loadStoredAdminUser();
+    const hasAdminToken = Boolean(localStorage.getItem('pothole_admin_token')) && Boolean(storedUser);
+    if (!hasAdminToken) clearStoredAdminSession();
+    return hasAdminToken;
+  });
 
   const activeLabel = useMemo(
     () => NAV_ITEMS.find((item) => item.id === active)?.label || 'Queue',
@@ -69,7 +93,7 @@ export default function App() {
   );
 
   const logout = () => {
-    localStorage.removeItem('pothole_admin_token');
+    clearStoredAdminSession();
     setHasToken(false);
     setUser(null);
     setSelectedTicket(null);

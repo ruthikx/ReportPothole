@@ -9,6 +9,10 @@ const { assignTicketSchema, updateStatusSchema } = require('../schemas/tickets')
 const { dispatchNotification } = require('../services/notificationQueue');
 const { computeImageHash } = require('../services/duplicateDetect');
 const {
+  cleanupTicketUploads,
+  getStoredUploadKey,
+} = require('../services/uploadStorage');
+const {
   actorFromAuth,
   listTicketEvents,
   recordTicketEvent,
@@ -37,6 +41,8 @@ const canViewTicketHistory = (auth, ticket) => {
 
   return ['engineer', 'supervisor', 'commissioner', 'admin'].includes(auth.role);
 };
+
+const cleanupUploadedTicketFiles = async (files) => cleanupTicketUploads(Ticket, files);
 
 router.get('/', requireRole('worker'), async (req, res, next) => {
   try {
@@ -250,19 +256,32 @@ router.patch(
     }
     next();
   },
-  validate(updateStatusSchema),
+  async (req, res, next) => {
+    const result = updateStatusSchema.safeParse(req.body);
+    if (!result.success) {
+      await cleanupUploadedTicketFiles(req.files || []);
+      const errors = result.error.errors.map((e) => ({
+        field: e.path.join('.'),
+        message: e.message,
+      }));
+      return res.status(400).json({ error: 'Validation failed', details: errors });
+    }
+    req.body = result.data;
+    next();
+  },
   async (req, res, next) => {
     try {
       const { status } = req.body;
 
       const existingTicket = await Ticket.findById(req.params.id);
       if (!existingTicket) {
+        await cleanupUploadedTicketFiles(req.files || []);
         return res.status(404).json({ error: 'Ticket not found' });
       }
 
       const update = { status };
       if (req.files && req.files.length > 0) {
-        update['photos.after'] = req.files.map((f) => f.key);
+        update['photos.after'] = req.files.map((f) => getStoredUploadKey(f)).filter(Boolean);
         const afterHashes = (
           await Promise.all(req.files.map((file) => computeImageHash(file)))
         ).filter(Boolean);
@@ -312,6 +331,7 @@ router.patch(
 
       res.json(ticket);
     } catch (err) {
+      await cleanupUploadedTicketFiles(req.files || []);
       next(err);
     }
   }
