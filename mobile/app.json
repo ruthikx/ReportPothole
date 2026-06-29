@@ -26,7 +26,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.potholeapp.reporter",
       "config": {
-        "googleMapsApiKey": "your-google-maps-api-key"
+        "googleMapsApiKey": ""
       }
     },
     "android": {
@@ -36,7 +36,7 @@
       "package": "com.potholeapp.reporter",
       "config": {
         "googleMaps": {
-          "apiKey": "your-google-maps-api-key"
+          "apiKey": ""
         }
       },
       "permissions": [

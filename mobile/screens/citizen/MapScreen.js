@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,16 +10,13 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from '../worker/ResolveScreenMap';
+import { WebView } from 'react-native-webview';
 import ReportCard from '../../components/ReportCard';
 import { fetchCommunityReports, upvoteReport } from '../../services/reports';
 
-const DEFAULT_REGION = {
-  latitude: 22.3072,
-  longitude: 73.1812,
-  latitudeDelta: 0.08,
-  longitudeDelta: 0.08,
-};
+const DEFAULT_LAT = 22.3072;
+const DEFAULT_LNG = 73.1812;
+const DEFAULT_ZOOM = 13;
 
 const getCoordinate = (report) => {
   if (
@@ -28,71 +25,91 @@ const getCoordinate = (report) => {
   ) {
     return null;
   }
-
   return {
     latitude: report.location.latitude,
     longitude: report.location.longitude,
   };
 };
 
-const getClusterKey = (report, bucketSize) => {
-  const coordinate = getCoordinate(report);
-  if (!coordinate) return null;
+const buildLeafletHTML = (reports) => {
+  const validReports = reports.filter(getCoordinate);
 
-  return [
-    Math.round(coordinate.latitude / bucketSize),
-    Math.round(coordinate.longitude / bucketSize),
-  ].join(':');
-};
+  const markerJS = validReports
+    .map((r) => {
+      const coord = getCoordinate(r);
+      const name = (r.locationName || 'Report').replace(/'/g, "\\'");
+      const desc = (r.description || 'No description').replace(/'/g, "\\'");
+      const id = String(r.id).replace(/'/g, "\\'");
+      return `
+        (function() {
+          var icon = L.divIcon({
+            className: '',
+            html: '<div style="width:32px;height:32px;background:#F25022;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></div>',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          });
+          var marker = L.marker([${coord.latitude}, ${coord.longitude}], { icon: icon }).addTo(map);
+          marker.on('click', function() {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'MARKER_PRESS',
+              id: '${id}',
+            }));
+          });
+        })();
+      `;
+    })
+    .join('\n');
 
-const buildClusters = (reports, region) => {
-  if (!region || region.latitudeDelta < 0.06) {
-    return reports
-      .filter(getCoordinate)
-      .map((report) => ({
-        id: report.id,
-        coordinate: getCoordinate(report),
-        reports: [report],
-      }));
-  }
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        #map { width: 100%; height: 100%; }
+      </style>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        var map = L.map('map', { zoomControl: true }).setView([${DEFAULT_LAT}, ${DEFAULT_LNG}], ${DEFAULT_ZOOM});
 
-  const bucketSize = region.latitudeDelta > 0.5 ? 0.04 : 0.015;
-  const groups = new Map();
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(map);
 
-  reports.forEach((report) => {
-    const key = getClusterKey(report, bucketSize);
-    const coordinate = getCoordinate(report);
-    if (!key || !coordinate) return;
+        ${markerJS}
 
-    const group = groups.get(key) || {
-      id: key,
-      latitudeTotal: 0,
-      longitudeTotal: 0,
-      reports: [],
-    };
-    group.latitudeTotal += coordinate.latitude;
-    group.longitudeTotal += coordinate.longitude;
-    group.reports.push(report);
-    groups.set(key, group);
-  });
+        // Listen for commands from React Native
+        document.addEventListener('message', handleMessage);
+        window.addEventListener('message', handleMessage);
 
-  return Array.from(groups.values()).map((group) => ({
-    id: group.id,
-    coordinate: {
-      latitude: group.latitudeTotal / group.reports.length,
-      longitude: group.longitudeTotal / group.reports.length,
-    },
-    reports: group.reports,
-  }));
+        function handleMessage(e) {
+          try {
+            var msg = JSON.parse(e.data);
+            if (msg.type === 'FLY_TO') {
+              map.setView([msg.latitude, msg.longitude], msg.zoom || 16);
+            }
+          } catch(err) {}
+        }
+      </script>
+    </body>
+    </html>
+  `;
 };
 
 const MapScreen = ({ route }) => {
-  const mapRef = useRef(null);
+  const webViewRef = useRef(null);
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [region, setRegion] = useState(DEFAULT_REGION);
   const [upvoting, setUpvoting] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -100,20 +117,11 @@ const MapScreen = ({ route }) => {
       const data = await fetchCommunityReports({ limit: 100 });
       setReports(data.reports);
 
-      const selected = data.reports.find((report) => report.id === route.params?.selectedReportId);
+      const selected = data.reports.find(
+        (report) => report.id === route.params?.selectedReportId
+      );
       if (selected) {
         setSelectedReport(selected);
-        const coordinate = getCoordinate(selected);
-        if (coordinate) {
-          mapRef.current?.animateToRegion(
-            {
-              ...coordinate,
-              latitudeDelta: 0.015,
-              longitudeDelta: 0.015,
-            },
-            450
-          );
-        }
       }
     } catch (err) {
       console.log('Map reports failed', err.response?.data || err.message);
@@ -127,29 +135,32 @@ const MapScreen = ({ route }) => {
     loadReports();
   }, [loadReports]);
 
-  const clusters = useMemo(() => buildClusters(reports, region), [reports, region]);
+  // Fly to selected report once map is ready
+  useEffect(() => {
+    if (!mapReady || !selectedReport) return;
+    const coord = getCoordinate(selectedReport);
+    if (!coord) return;
+    webViewRef.current?.injectJavaScript(`
+      map.setView([${coord.latitude}, ${coord.longitude}], 16);
+      true;
+    `);
+  }, [mapReady, selectedReport]);
 
-  const handleMarkerPress = (cluster) => {
-    if (cluster.reports.length > 1) {
-      const nextRegion = {
-        latitude: cluster.coordinate.latitude,
-        longitude: cluster.coordinate.longitude,
-        latitudeDelta: Math.max(region.latitudeDelta / 2.5, 0.012),
-        longitudeDelta: Math.max(region.longitudeDelta / 2.5, 0.012),
-      };
-      mapRef.current?.animateToRegion(nextRegion, 300);
-      setRegion(nextRegion);
-      setSelectedReport(cluster.reports[0]);
-      return;
+  const handleWebViewMessage = (event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'MARKER_PRESS') {
+        const report = reports.find((r) => String(r.id) === String(data.id));
+        if (report) setSelectedReport(report);
+      }
+    } catch (err) {
+      console.log('WebView message parse error', err);
     }
-
-    setSelectedReport(cluster.reports[0]);
   };
 
   const handleUpvote = async () => {
     if (!selectedReport) return;
     setUpvoting(true);
-
     try {
       const response = await upvoteReport(selectedReport);
       setSelectedReport((current) => ({ ...current, upvotes: response.upvotes }));
@@ -170,37 +181,24 @@ const MapScreen = ({ route }) => {
 
   const selectedCoordinate = selectedReport ? getCoordinate(selectedReport) : null;
 
+  // Rebuild HTML whenever reports change
+  const leafletHTML = buildLeafletHTML(reports);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.mapShell}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={DEFAULT_REGION}
-          onRegionChangeComplete={setRegion}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          {clusters.map((cluster) => {
-            const isCluster = cluster.reports.length > 1;
-            return (
-              <Marker
-                key={cluster.id}
-                coordinate={cluster.coordinate}
-                onPress={() => handleMarkerPress(cluster)}
-              >
-                <View style={[styles.marker, isCluster && styles.clusterMarker]}>
-                  {isCluster ? (
-                    <Text style={styles.clusterText}>{cluster.reports.length}</Text>
-                  ) : (
-                    <Ionicons name="alert" size={18} color="#FFFFFF" />
-                  )}
-                </View>
-              </Marker>
-            );
-          })}
-        </MapView>
 
+        <WebView
+          ref={webViewRef}
+          style={styles.map}
+          source={{ html: leafletHTML }}
+          onMessage={handleWebViewMessage}
+          onLoad={() => setMapReady(true)}
+          javaScriptEnabled
+          originWhitelist={['*']}
+        />
+
+        {/* Top bar */}
         <View style={styles.topBar}>
           <View>
             <Text style={styles.title}>Pothole Map</Text>
@@ -211,6 +209,7 @@ const MapScreen = ({ route }) => {
           </TouchableOpacity>
         </View>
 
+        {/* Loading pill */}
         {loading && (
           <View style={styles.loadingPill}>
             <ActivityIndicator size="small" color="#F25022" />
@@ -218,6 +217,7 @@ const MapScreen = ({ route }) => {
           </View>
         )}
 
+        {/* Selected report sheet */}
         {selectedReport && (
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
@@ -270,6 +270,7 @@ const MapScreen = ({ route }) => {
           </View>
         )}
 
+        {/* Peek card */}
         {!selectedReport && reports.length > 0 && (
           <View style={styles.peekCard}>
             <ReportCard
@@ -329,26 +330,6 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     width: 42,
-  },
-  marker: {
-    alignItems: 'center',
-    backgroundColor: '#F25022',
-    borderColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 3,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  clusterMarker: {
-    backgroundColor: '#1D160F',
-    height: 42,
-    width: 42,
-  },
-  clusterText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '900',
   },
   loadingPill: {
     alignItems: 'center',
