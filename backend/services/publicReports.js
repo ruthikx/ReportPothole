@@ -37,7 +37,7 @@ const buildPhotoUrls = async (photoKeys = []) => (
 const serializePublicReport = async (ticket, history = []) => {
   const beforePhotoUrls = await buildPhotoUrls(ticket.photos?.before || []);
   const afterPhotoUrls = await buildPhotoUrls(ticket.photos?.after || []);
-  const ward = serializeWard(ticket.ward);
+  const ward = serializeWard(ticket.ward) || (ticket.wardName ? { name: ticket.wardName } : null);
   const location = serializeLocation(ticket.location);
 
   return {
@@ -48,6 +48,7 @@ const serializePublicReport = async (ticket, history = []) => {
     status: ticket.status,
     statusLabel: STATUS_LABELS[ticket.status] || ticket.status,
     ward,
+    wardName: ticket.wardName || ward?.name,
     address: ticket.address,
     location,
     locationName: ticket.address || ward?.name || 'Reported location',

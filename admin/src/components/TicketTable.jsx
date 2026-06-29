@@ -1,6 +1,7 @@
 import StatusBadge from './StatusBadge.jsx';
 import SlaBadge from './SlaBadge.jsx';
 import { resolveMediaUrl } from '../api.js';
+import { inferWardName } from '../wardNames.js';
 
 const getTicketThumbnail = (ticket) => (
   resolveMediaUrl(ticket.thumbnailUrl) ||
@@ -32,6 +33,7 @@ export default function TicketTable({ tickets, onSelect, emptyLabel = 'No ticket
         <tbody>
           {tickets.map((ticket) => {
             const thumbnailUrl = getTicketThumbnail(ticket);
+            const wardName = ticket.wardName || ticket.ward?.name || inferWardName(ticket.address, ticket.description);
 
             return (
               <tr key={ticket._id} onClick={() => onSelect?.(ticket)}>
@@ -54,7 +56,7 @@ export default function TicketTable({ tickets, onSelect, emptyLabel = 'No ticket
                 <td>
                   <span className="address-cell">{ticket.address || 'No address provided'}</span>
                 </td>
-                <td>{ticket.ward?.name || 'Unassigned'}</td>
+                <td>{wardName || 'Unassigned'}</td>
                 <td><StatusBadge status={ticket.status} /></td>
                 <td>{ticket.assignedTo?.name || 'None'}</td>
                 <td><SlaBadge deadline={ticket.slaDeadline} /></td>

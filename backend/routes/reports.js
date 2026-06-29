@@ -18,6 +18,7 @@ const {
   recordTicketEvent,
 } = require('../services/ticketEvents');
 const { serializePublicReport } = require('../services/publicReports');
+const { inferWardName } = require('../services/wardNames');
 const redis = require('../config/redis');
 const User = require('../models/User');
 
@@ -137,6 +138,7 @@ router.post(
       }
 
       const ward = await findWardByPoint(longitude, latitude);
+      const wardName = ward?.name || inferWardName(address, description);
       const beforePhotos = uploaded.map((f) => getStoredUploadKey(f)).filter(Boolean);
       const beforeHashes = (
         await Promise.all(uploaded.map((file) => computeImageHash(file)))
@@ -154,6 +156,7 @@ router.post(
           coordinates: [longitude, latitude],
         },
         ward: ward ? ward._id : undefined,
+        wardName,
         address,
         photos: { before: beforePhotos },
         imageHashes: { before: beforeHashes },
@@ -185,7 +188,7 @@ router.post(
         if (engineer) {
           await dispatchNotification(engineer, {
             title: `New Pothole Report: ${reportId}`,
-            body: `A new pothole has been reported in ${ward.name}. Please investigate.`,
+            body: `A new pothole has been reported in ${wardName || ward.name}. Please investigate.`,
             channels: ['fcm'],
             data: { ticketId: ticket._id.toString(), reportId },
           });
@@ -196,7 +199,7 @@ router.post(
         reportId,
         ticketId: ticket._id,
         isDuplicate: false,
-        ward: ward ? ward.name : null,
+        ward: wardName || null,
         slaDeadline,
       });
     } catch (err) {

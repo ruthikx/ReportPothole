@@ -9,6 +9,8 @@ const staffRoleSchema = z.enum([
   'admin',
 ]);
 
+const workerRoleSchema = z.literal('worker');
+
 const coordinatePairSchema = z.tuple([
   z.coerce.number().min(-180).max(180),
   z.coerce.number().min(-90).max(90),
@@ -41,6 +43,10 @@ const listUsersQuerySchema = z.object({
   ward: objectId.optional(),
 });
 
+const listWorkersQuerySchema = z.object({
+  ward: objectId.optional(),
+});
+
 const createUserSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email().toLowerCase(),
@@ -50,12 +56,36 @@ const createUserSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+const createWorkerSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email().toLowerCase(),
+  phone: z.string().max(40).optional(),
+  role: workerRoleSchema.optional(),
+  ward: z.union([objectId, z.literal('')]).optional(),
+  wardName: z.string().trim().min(1).max(120).optional(),
+  password: z.string().min(8).max(128),
+}).refine((data) => data.ward || data.wardName, {
+  message: 'Ward is required',
+  path: ['wardName'],
+});
+
 const updateUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   email: z.string().email().toLowerCase().optional(),
   phone: z.string().max(40).optional(),
   role: staffRoleSchema.optional(),
   ward: z.union([objectId, z.literal('')]).optional(),
+  password: z.string().min(8).max(128).optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+  message: 'At least one field is required',
+});
+
+const updateWorkerSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  email: z.string().email().toLowerCase().optional(),
+  phone: z.string().max(40).optional(),
+  ward: z.union([objectId, z.literal('')]).optional(),
+  wardName: z.string().trim().min(1).max(120).optional(),
   password: z.string().min(8).max(128).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'At least one field is required',
@@ -75,12 +105,16 @@ const idParamSchema = z.object({
 
 module.exports = {
   assignWardEngineerSchema,
+  createWorkerSchema,
   createUserSchema,
   createWardSchema,
   idParamSchema,
+  listWorkersQuerySchema,
   listUsersQuerySchema,
   staffRoleSchema,
+  updateWorkerSchema,
   updateUserSchema,
   updateWardSlaSchema,
   updateWardSchema,
+  workerRoleSchema,
 };

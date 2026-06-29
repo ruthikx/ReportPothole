@@ -23,6 +23,11 @@ const ticketSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Ward',
     },
+    wardName: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+    },
     address: {
       type: String,
       trim: true,

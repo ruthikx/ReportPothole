@@ -68,7 +68,7 @@ router.get('/heatmap', async (req, res, next) => {
   try {
     const tickets = await Ticket.find(
       { status: { $ne: 'resolved' }, location: { $exists: true } },
-      { location: 1, upvotes: 1, status: 1, reportId: 1, escalationLevel: 1, ward: 1 }
+      { location: 1, upvotes: 1, status: 1, reportId: 1, escalationLevel: 1, ward: 1, wardName: 1 }
     )
       .populate('ward', 'name')
       .lean();
@@ -86,7 +86,7 @@ router.get('/heatmap', async (req, res, next) => {
             status: ticket.status,
             upvotes: ticket.upvotes,
             escalationLevel: ticket.escalationLevel,
-            ward: ticket.ward?.name || 'Unassigned',
+            ward: ticket.wardName || ticket.ward?.name || 'Unassigned',
           },
         })),
     });
@@ -108,8 +108,13 @@ router.get('/wards', async (req, res, next) => {
       },
       { $unwind: { path: '$wardInfo', preserveNullAndEmptyArrays: true } },
       {
+        $addFields: {
+          displayWardName: { $ifNull: ['$wardName', '$wardInfo.name'] },
+        },
+      },
+      {
         $group: {
-          _id: { $ifNull: ['$wardInfo.name', 'Unassigned'] },
+          _id: { $ifNull: ['$displayWardName', 'Unassigned'] },
           total: { $sum: 1 },
           open: { $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] } },
           assigned: { $sum: { $cond: [{ $eq: ['$status', 'assigned'] }, 1, 0] } },

@@ -170,7 +170,7 @@ export default function App() {
           />
         )}
         {active === 'analytics' && <Analytics />}
-        {active === 'settings' && <SettingsPage />}
+        {active === 'settings' && <SettingsPage user={user} />}
       </main>
     </div>
   );

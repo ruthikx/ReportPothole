@@ -5,10 +5,13 @@ const { ROLE_RANKS, requireRole } = require('../middleware/auth');
 const { validate, validateParams, validateQuery } = require('../middleware/validate');
 const {
   assignWardEngineerSchema,
+  createWorkerSchema,
   createUserSchema,
   createWardSchema,
   idParamSchema,
+  listWorkersQuerySchema,
   listUsersQuerySchema,
+  updateWorkerSchema,
   updateUserSchema,
   updateWardSlaSchema,
   updateWardSchema,
@@ -28,6 +31,7 @@ const serializeUser = (user) => ({
   phone: user.phone,
   role: user.role,
   ward: user.ward,
+  wardName: user.wardName || user.ward?.name,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -52,6 +56,41 @@ const ensureWardExists = async (wardId) => {
     err.statusCode = 404;
     throw err;
   }
+};
+
+const resolveWorkerWard = async ({ ward, wardName }) => {
+  const cleanWard = cleanOptionalObjectId(ward);
+  const cleanWardName = typeof wardName === 'string' ? wardName.trim() : '';
+
+  if (cleanWard) {
+    const existingWard = await Ward.findById(cleanWard).select('name').lean();
+    if (!existingWard) {
+      const err = new Error('Ward not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    return {
+      ward: cleanWard,
+      wardName: cleanWardName || existingWard.name,
+    };
+  }
+
+  if (!cleanWardName) {
+    return {
+      ward: undefined,
+      wardName: undefined,
+    };
+  }
+
+  const existingWard = await Ward.findOne({
+    name: new RegExp(`^${cleanWardName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+  }).select('_id name').lean();
+
+  return {
+    ward: existingWard?._id,
+    wardName: existingWard?.name || cleanWardName,
+  };
 };
 
 const ensureAssignedEngineer = async (engineerId) => {
@@ -85,7 +124,7 @@ router.get('/users', requireRole('supervisor'), validateQuery(listUsersQuerySche
 
     const users = await populateUser(
       User.find(filter)
-        .select('name email phone role ward createdAt updatedAt')
+        .select('name email phone role ward wardName createdAt updatedAt')
         .sort({ role: 1, name: 1 })
         .limit(200)
     ).lean();
@@ -95,6 +134,92 @@ router.get('/users', requireRole('supervisor'), validateQuery(listUsersQuerySche
     next(err);
   }
 });
+
+router.get('/workers', requireRole('engineer'), validateQuery(listWorkersQuerySchema), async (req, res, next) => {
+  try {
+    const filter = { role: 'worker' };
+    if (req.query.ward) {
+      filter.ward = req.query.ward;
+    }
+
+    const workers = await populateUser(
+      User.find(filter)
+        .select('name email phone role ward wardName createdAt updatedAt')
+        .sort({ name: 1 })
+        .limit(300)
+    ).lean();
+
+    res.json({ workers: workers.map(serializeUser) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/workers', requireRole('engineer'), validate(createWorkerSchema), async (req, res, next) => {
+  try {
+    const { name, email, phone, password } = req.body;
+    const workerWard = await resolveWorkerWard(req.body);
+
+    ensureCanManageRole(req.auth.role, 'worker');
+
+    const existing = await User.findOne({ email });
+    if (existing) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const worker = new User({
+      name,
+      email,
+      phone,
+      role: 'worker',
+      ward: workerWard.ward,
+      wardName: workerWard.wardName,
+      passwordHash: password,
+    });
+
+    await worker.save();
+    await worker.populate('ward', 'name slaHours');
+
+    res.status(201).json({ worker: serializeUser(worker) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch(
+  '/workers/:id',
+  requireRole('engineer'),
+  validateParams(idParamSchema),
+  validate(updateWorkerSchema),
+  async (req, res, next) => {
+    try {
+      const worker = await User.findById(req.params.id);
+      if (!worker || worker.role !== 'worker') {
+        return res.status(404).json({ error: 'Worker not found' });
+      }
+
+      ensureCanManageRole(req.auth.role, 'worker');
+
+      if (hasOwn(req.body, 'ward') || hasOwn(req.body, 'wardName')) {
+        const workerWard = await resolveWorkerWard(req.body);
+        worker.ward = workerWard.ward;
+        worker.wardName = workerWard.wardName;
+      }
+
+      if (req.body.name !== undefined) worker.name = req.body.name;
+      if (req.body.email !== undefined) worker.email = req.body.email;
+      if (req.body.phone !== undefined) worker.phone = req.body.phone;
+      if (req.body.password !== undefined) worker.passwordHash = req.body.password;
+
+      await worker.save();
+      await worker.populate('ward', 'name slaHours');
+
+      res.json({ worker: serializeUser(worker) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 router.post('/users', requireRole('supervisor'), validate(createUserSchema), async (req, res, next) => {
   try {

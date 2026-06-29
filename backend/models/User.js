@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Ward',
     },
+    wardName: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+    },
     passwordHash: {
       type: String,
       required: true,

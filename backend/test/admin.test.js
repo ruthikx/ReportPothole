@@ -149,6 +149,83 @@ describe('admin management routes', () => {
       .expect(403);
   });
 
+  test('engineers can manage field workers for assignment', async () => {
+    const engineer = await createUser({ role: 'engineer', email: 'field-engineer@example.com' });
+    const ward = await createWard({ assignedEngineer: engineer._id });
+    const token = tokenFor(engineer);
+
+    const createResponse = await request(app)
+      .post('/api/v1/admin/workers')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Ward 42 Patch Crew',
+        email: 'ward-42-crew@example.com',
+        phone: '+918012345678',
+        password: 'password123',
+        wardName: ward.name,
+      })
+      .expect(201);
+
+    expect(createResponse.body.worker).toMatchObject({
+      name: 'Ward 42 Patch Crew',
+      email: 'ward-42-crew@example.com',
+      phone: '+918012345678',
+      role: 'worker',
+      wardName: ward.name,
+      ward: {
+        name: ward.name,
+      },
+    });
+    expect(createResponse.body.worker.passwordHash).toBeUndefined();
+
+    const workersResponse = await request(app)
+      .get('/api/v1/admin/workers')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(workersResponse.body.workers).toHaveLength(1);
+    expect(workersResponse.body.workers[0]).toMatchObject({
+      email: 'ward-42-crew@example.com',
+      role: 'worker',
+    });
+
+    const wardWorkersResponse = await request(app)
+      .get(`/api/v1/tickets/meta/workers?ward=${ward._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(wardWorkersResponse.body.workers.map((worker) => worker.email)).toContain('ward-42-crew@example.com');
+
+    const updateResponse = await request(app)
+      .patch(`/api/v1/admin/workers/${createResponse.body.worker._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        phone: '+919876543210',
+        wardName: 'SS Puram',
+      })
+      .expect(200);
+
+    expect(updateResponse.body.worker).toMatchObject({
+      email: 'ward-42-crew@example.com',
+      phone: '+919876543210',
+      role: 'worker',
+      wardName: 'SS Puram',
+    });
+    expect(updateResponse.body.worker.ward).toBeUndefined();
+
+    const generalWorkersResponse = await request(app)
+      .get(`/api/v1/tickets/meta/workers?ward=${ward._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(generalWorkersResponse.body.workers.map((worker) => worker.email)).not.toContain('ward-42-crew@example.com');
+
+    await request(app)
+      .post('/api/v1/auth/admin/login')
+      .send({ email: 'ward-42-crew@example.com', password: 'password123' })
+      .expect(403);
+  });
+
   test('supervisors can create engineers but cannot create admins', async () => {
     const supervisor = await createUser({ role: 'supervisor', email: 'supervisor@example.com' });
     const ward = await createWard();

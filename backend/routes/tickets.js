@@ -62,6 +62,7 @@ const canViewTicketHistory = (auth, ticket) => {
 };
 
 const cleanupUploadedTicketFiles = async (files) => cleanupTicketUploads(Ticket, files);
+const exactTextRegex = (value) => new RegExp(`^${String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
 router.get('/', requireRole('worker'), async (req, res, next) => {
   try {
@@ -130,11 +131,17 @@ router.get('/meta/workers', requireRole('engineer'), async (req, res, next) => {
   try {
     const filter = { role: 'worker' };
     if (req.query.ward) {
-      filter.ward = req.query.ward;
+      const ward = await Ward.findById(req.query.ward).select('name').lean();
+      filter.$or = [
+        { ward: req.query.ward },
+      ];
+      if (ward?.name) {
+        filter.$or.push({ wardName: exactTextRegex(ward.name) });
+      }
     }
 
     const workers = await User.find(filter)
-      .select('name email phone ward')
+      .select('name email phone ward wardName')
       .populate('ward', 'name')
       .sort({ name: 1 })
       .lean();
@@ -237,6 +244,9 @@ router.patch('/:id/assign', requireRole('engineer'), validate(assignTicketSchema
 
     ticket.assignedTo = workerId;
     ticket.status = 'assigned';
+    if (!ticket.wardName && worker.wardName) {
+      ticket.wardName = worker.wardName;
+    }
     await ticket.save();
     await ticket.populate('ward', 'name');
 
@@ -257,7 +267,7 @@ router.patch('/:id/assign', requireRole('engineer'), validate(assignTicketSchema
 
     await dispatchNotification(worker, {
       title: `Assigned: ${ticket.reportId}`,
-      body: `A pothole repair ticket has been assigned${ticket.ward ? ` in ${ticket.ward.name}` : ''}.`,
+      body: `A pothole repair ticket has been assigned${ticket.wardName || ticket.ward ? ` in ${ticket.wardName || ticket.ward.name}` : ''}.`,
       channels: ['fcm', 'sms'],
     });
 

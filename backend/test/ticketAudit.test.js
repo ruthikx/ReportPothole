@@ -20,6 +20,7 @@ const createUser = async (overrides = {}) => {
     email: overrides.email || `user-${unique}@example.com`,
     phone: overrides.phone,
     role: overrides.role || 'citizen',
+    wardName: overrides.wardName,
     passwordHash: overrides.password || 'password123',
   });
 };
@@ -100,6 +101,41 @@ describe('ticket audit history', () => {
         },
       },
       note: `Assigned to ${worker.name}.`,
+    });
+  });
+
+  test('assignment backfills ticket ward name from field worker when no geo ward exists', async () => {
+    const engineer = await createUser({ role: 'engineer', email: 'engineer-ward-name@example.com' });
+    const worker = await createUser({
+      role: 'worker',
+      email: 'worker-ward-name@example.com',
+      wardName: 'Saraswathipuram',
+    });
+    const ticket = await createTicket({
+      address: '10th Cross Road, Saraswathipuram, Tumakur, Karnataka',
+    });
+
+    await request(app)
+      .patch(`/api/v1/tickets/${ticket._id}/assign`)
+      .set('Authorization', `Bearer ${tokenFor(engineer)}`)
+      .send({ workerId: String(worker._id) })
+      .expect(200);
+
+    const updatedTicket = await Ticket.findById(ticket._id).lean();
+    expect(updatedTicket.ward).toBeUndefined();
+    expect(updatedTicket.wardName).toBe('Saraswathipuram');
+
+    const response = await request(app)
+      .get('/api/v1/tickets')
+      .set('Authorization', `Bearer ${tokenFor(engineer)}`)
+      .expect(200);
+
+    expect(response.body.tickets[0]).toMatchObject({
+      reportId: ticket.reportId,
+      wardName: 'Saraswathipuram',
+      assignedTo: {
+        name: worker.name,
+      },
     });
   });
 
