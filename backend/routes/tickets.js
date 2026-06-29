@@ -10,6 +10,7 @@ const { dispatchNotification } = require('../services/notificationQueue');
 const { computeImageHash } = require('../services/duplicateDetect');
 const {
   cleanupTicketUploads,
+  generatePresignedUrl,
   getStoredUploadKey,
 } = require('../services/uploadStorage');
 const {
@@ -21,6 +22,24 @@ const {
 
 const router = express.Router();
 const TICKET_STATUSES = ['open', 'assigned', 'in_progress', 'resolved'];
+
+const buildPhotoUrls = async (photoKeys = []) => (
+  await Promise.all(photoKeys.map((photo) => generatePresignedUrl(photo)))
+).filter(Boolean);
+
+const serializeAdminTicket = async (ticket) => {
+  const beforePhotoUrls = await buildPhotoUrls(ticket.photos?.before || []);
+  const afterPhotoUrls = await buildPhotoUrls(ticket.photos?.after || []);
+
+  return {
+    ...ticket,
+    photoUrls: {
+      before: beforePhotoUrls,
+      after: afterPhotoUrls,
+    },
+    thumbnailUrl: beforePhotoUrls[0] || afterPhotoUrls[0] || null,
+  };
+};
 
 const parseStatusFilter = (status) => {
   if (!status) return undefined;
@@ -74,8 +93,10 @@ router.get('/', requireRole('worker'), async (req, res, next) => {
       Ticket.countDocuments(filter),
     ]);
 
+    const serializedTickets = await Promise.all(tickets.map(serializeAdminTicket));
+
     res.json({
-      tickets,
+      tickets: serializedTickets,
       pagination: {
         page,
         limit,
@@ -99,7 +120,7 @@ router.get('/overdue', requireRole('supervisor'), async (req, res, next) => {
       .sort({ slaDeadline: 1 })
       .lean();
 
-    res.json({ tickets });
+    res.json({ tickets: await Promise.all(tickets.map(serializeAdminTicket)) });
   } catch (err) {
     next(err);
   }
@@ -191,7 +212,7 @@ router.get('/:id', requireRole('worker'), async (req, res, next) => {
       return res.status(404).json({ error: 'Ticket not found' });
     }
 
-    res.json(ticket);
+    res.json(await serializeAdminTicket(ticket.toObject()));
   } catch (err) {
     next(err);
   }

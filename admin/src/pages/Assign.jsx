@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
-import api from '../api.js';
+import api, { resolveMediaUrl } from '../api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
+
+const getTicketThumbnail = (ticket) => (
+  resolveMediaUrl(ticket?.thumbnailUrl) ||
+  resolveMediaUrl(ticket?.photoUrls?.before?.[0]) ||
+  resolveMediaUrl(ticket?.photoUrls?.after?.[0])
+);
 
 export default function Assign({ ticket, onDone }) {
   const [workers, setWorkers] = useState([]);
@@ -27,14 +33,34 @@ export default function Assign({ ticket, onDone }) {
 
   if (!ticket) return <section className="page empty-state">Select a ticket from the queue.</section>;
 
+  const thumbnailUrl = getTicketThumbnail(ticket);
+
   return (
     <section className="page">
       <div className="detail-card">
-        <h2>{ticket.reportId}</h2>
-        <StatusBadge status={ticket.status} />
-        <p>{ticket.description || ticket.address || 'No public note'}</p>
-        <div className="row">
-          <strong>Ward:</strong> <span>{ticket.ward?.name || 'Unassigned'}</span>
+        <div className="ticket-detail">
+          {thumbnailUrl ? (
+            <img
+              className="ticket-detail-image"
+              src={thumbnailUrl}
+              alt={`Pothole report ${ticket.reportId}`}
+            />
+          ) : (
+            <div className="ticket-detail-image placeholder">No image</div>
+          )}
+          <div>
+            <h2>{ticket.reportId}</h2>
+            <StatusBadge status={ticket.status} />
+            <p>{ticket.description || 'No public note'}</p>
+            <div className="detail-stack">
+              <div className="row">
+                <strong>Address:</strong> <span>{ticket.address || 'No address provided'}</span>
+              </div>
+              <div className="row">
+                <strong>Ward:</strong> <span>{ticket.ward?.name || 'Unassigned'}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div className="toolbar">

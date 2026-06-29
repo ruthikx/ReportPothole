@@ -8,6 +8,25 @@ const api = axios.create({
   timeout: 30000,
 });
 
+const getApiOrigin = () => {
+  try {
+    return new URL(API_BASE_URL).origin;
+  } catch {
+    return API_BASE_URL.replace(/\/api(?:\/v\d+)?\/?$/, '');
+  }
+};
+
+export const resolveMediaUrl = (value) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+
+  try {
+    return new URL(value, getApiOrigin()).toString();
+  } catch {
+    return value;
+  }
+};
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('pothole_admin_token');
   if (token) {

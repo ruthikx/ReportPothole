@@ -1,5 +1,12 @@
 import StatusBadge from './StatusBadge.jsx';
 import SlaBadge from './SlaBadge.jsx';
+import { resolveMediaUrl } from '../api.js';
+
+const getTicketThumbnail = (ticket) => (
+  resolveMediaUrl(ticket.thumbnailUrl) ||
+  resolveMediaUrl(ticket.photoUrls?.before?.[0]) ||
+  resolveMediaUrl(ticket.photoUrls?.after?.[0])
+);
 
 export default function TicketTable({ tickets, onSelect, emptyLabel = 'No tickets found' }) {
   if (!tickets.length) {
@@ -11,7 +18,9 @@ export default function TicketTable({ tickets, onSelect, emptyLabel = 'No ticket
       <table>
         <thead>
           <tr>
+            <th>Image</th>
             <th>Report</th>
+            <th>Address</th>
             <th>Ward</th>
             <th>Status</th>
             <th>Assigned</th>
@@ -21,20 +30,39 @@ export default function TicketTable({ tickets, onSelect, emptyLabel = 'No ticket
           </tr>
         </thead>
         <tbody>
-          {tickets.map((ticket) => (
-            <tr key={ticket._id} onClick={() => onSelect?.(ticket)}>
-              <td>
-                <strong>{ticket.reportId}</strong>
-                <span>{ticket.description || ticket.address || 'No public note'}</span>
-              </td>
-              <td>{ticket.ward?.name || 'Unassigned'}</td>
-              <td><StatusBadge status={ticket.status} /></td>
-              <td>{ticket.assignedTo?.name || 'None'}</td>
-              <td><SlaBadge deadline={ticket.slaDeadline} /></td>
-              <td>L{ticket.escalationLevel || 0}</td>
-              <td>{ticket.upvotes || 0}</td>
-            </tr>
-          ))}
+          {tickets.map((ticket) => {
+            const thumbnailUrl = getTicketThumbnail(ticket);
+
+            return (
+              <tr key={ticket._id} onClick={() => onSelect?.(ticket)}>
+                <td>
+                  {thumbnailUrl ? (
+                    <img
+                      className="ticket-thumb"
+                      src={thumbnailUrl}
+                      alt={`Pothole report ${ticket.reportId}`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="ticket-thumb-placeholder">No image</span>
+                  )}
+                </td>
+                <td>
+                  <strong>{ticket.reportId}</strong>
+                  <span>{ticket.description || 'No public note'}</span>
+                </td>
+                <td>
+                  <span className="address-cell">{ticket.address || 'No address provided'}</span>
+                </td>
+                <td>{ticket.ward?.name || 'Unassigned'}</td>
+                <td><StatusBadge status={ticket.status} /></td>
+                <td>{ticket.assignedTo?.name || 'None'}</td>
+                <td><SlaBadge deadline={ticket.slaDeadline} /></td>
+                <td>L{ticket.escalationLevel || 0}</td>
+                <td>{ticket.upvotes || 0}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -32,7 +32,9 @@ const createTicket = async (overrides = {}) => {
       type: 'Point',
       coordinates: [77.5946, 12.9716],
     },
-    description: 'Audit test ticket',
+    address: overrides.address,
+    photos: overrides.photos,
+    description: overrides.description || 'Audit test ticket',
     status: overrides.status || 'open',
     assignedTo: overrides.assignedTo,
     upvotes: overrides.upvotes || 1,
@@ -149,6 +151,29 @@ describe('ticket audit history', () => {
     expect(updatedTicket.photos.after).toHaveLength(1);
     expect(updatedTicket.photos.after[0]).toMatch(/^uploads\/.+\.png$/);
     expect(updatedTicket.imageHashes.after).toHaveLength(1);
+  });
+
+  test('ticket queue exposes address and thumbnail data for admin views', async () => {
+    const engineer = await createUser({ role: 'engineer', email: 'queue-engineer@example.com' });
+    const ticket = await createTicket({
+      address: 'MG Road near Metro Gate 2',
+      photos: { before: ['uploads/queue-photo.png'] },
+    });
+
+    const response = await request(app)
+      .get('/api/v1/tickets')
+      .set('Authorization', `Bearer ${tokenFor(engineer)}`)
+      .expect(200);
+
+    expect(response.body.tickets).toHaveLength(1);
+    expect(response.body.tickets[0]).toMatchObject({
+      reportId: ticket.reportId,
+      address: 'MG Road near Metro Gate 2',
+      thumbnailUrl: '/uploads/queue-photo.png',
+      photoUrls: {
+        before: ['/uploads/queue-photo.png'],
+      },
+    });
   });
 
   test('escalation job writes an audit event', async () => {
