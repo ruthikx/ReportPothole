@@ -169,15 +169,15 @@ button:disabled {
   position: relative;
   z-index: 1;
   display: flex;
-  flex: 0 0 238px;
+  flex: 0 0 250px;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 22px;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
 }
 
 .sync-panel {
-  padding: 12px;
+  padding: 9px 11px;
   border: 1px solid rgba(255, 205, 137, 0.34);
   border-radius: 8px;
   background: rgba(16, 12, 10, 0.46);
@@ -188,31 +188,33 @@ button:disabled {
 .sync-panel span {
   display: block;
   color: #ffc56f;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 850;
   text-transform: uppercase;
 }
 
 .sync-panel strong {
   display: block;
-  margin-top: 7px;
-  font-size: 0.88rem;
-  line-height: 1.35;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  line-height: 1.25;
 }
 
 .refresh-button,
+.download-button,
 .lookup-controls button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 38px;
   border-radius: 8px;
   background: linear-gradient(135deg, var(--amber), #f6a735);
   color: #21120a;
   font-weight: 850;
   white-space: nowrap;
   box-shadow: 0 14px 28px rgba(185, 82, 9, 0.24);
+  text-decoration: none;
   transition:
     transform 160ms ease,
     box-shadow 160ms ease,
@@ -220,14 +222,53 @@ button:disabled {
 }
 
 .refresh-button:hover,
+.download-button:hover,
 .lookup-controls button:hover {
   filter: saturate(1.08);
   transform: translateY(-1px);
   box-shadow: 0 18px 34px rgba(185, 82, 9, 0.3);
 }
 
-.refresh-button {
+.refresh-button,
+.download-button {
   padding: 0 16px;
+}
+
+.download-button {
+  justify-content: flex-start;
+  min-height: 58px;
+  background: linear-gradient(135deg, #ff9d2e, #f6b34c);
+  color: #21120a;
+  border: 1px solid rgba(255, 235, 196, 0.6);
+  box-shadow: 0 18px 34px rgba(185, 82, 9, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.download-button:hover {
+  background: linear-gradient(135deg, #ffa947, #ffc46e);
+  box-shadow: 0 20px 38px rgba(185, 82, 9, 0.4);
+}
+
+.header-button-group {
+  display: grid;
+  gap: 8px;
+}
+
+.download-copy {
+  display: grid;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.download-copy strong {
+  font-size: 0.9rem;
+}
+
+.download-copy small {
+  color: rgba(33, 18, 10, 0.72);
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: normal;
 }
 
 .error-banner {
@@ -996,6 +1037,10 @@ footer {
     flex: 1;
   }
 
+  .header-button-group {
+    min-width: 180px;
+  }
+
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1044,7 +1089,8 @@ footer {
     padding: 0 16px 18px;
   }
 
-  .refresh-button {
+  .refresh-button,
+  .download-button {
     width: 100%;
   }
 

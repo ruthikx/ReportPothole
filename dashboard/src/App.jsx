@@ -5,6 +5,7 @@ import {
   BarChart3,
   CheckCircle2,
   Clock3,
+  Download,
   Loader2,
   MapPin,
   RefreshCw,
@@ -45,6 +46,7 @@ const DEFAULT_MAP_STYLE = {
 };
 
 const MAPLIBRE_STYLE = import.meta.env.VITE_MAPLIBRE_STYLE_URL || DEFAULT_MAP_STYLE;
+const APP_DOWNLOAD_URL = 'https://expo.dev/artifacts/eas/CQm-ea7PNKWlkQkLL_VgeIvimCyNTGqPRU_9cs97sxU.apk';
 
 const EMPTY_STATS = {
   totalReports: 0,
@@ -682,10 +684,25 @@ export default function App() {
             <span>Latest sync</span>
             <strong>{updatedAt ? formatDate(updatedAt) : 'Waiting for data'}</strong>
           </div>
-          <button type="button" className="refresh-button" onClick={loadDashboard} disabled={loading}>
-            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-            <span>Refresh</span>
-          </button>
+          <div className="header-button-group">
+            <a
+              className="download-button"
+              href={APP_DOWNLOAD_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Download the PathHole app APK to report potholes"
+            >
+              <Download size={18} />
+              <span className="download-copy">
+                <strong>Download App</strong>
+                <small>Report potholes from your phone</small>
+              </span>
+            </a>
+            <button type="button" className="refresh-button" onClick={loadDashboard} disabled={loading}>
+              {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
       </header>
 
