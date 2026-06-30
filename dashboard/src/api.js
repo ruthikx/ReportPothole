@@ -13,7 +13,7 @@ export const getDashboardStats = async () => {
   return response.data;
 };
 
-export const getOpenTicketHeatmap = async () => {
+export const getOpenTicketMapData = async () => {
   const response = await api.get('/dashboard/heatmap');
   return response.data;
 };

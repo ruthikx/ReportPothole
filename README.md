@@ -21,9 +21,9 @@ The backend is implemented with CommonJS (`require` and `module.exports`). The V
 - Optional Redis for report rate limiting and BullMQ notification jobs
 - Optional S3-compatible AWS credentials for uploaded photo storage
 - Optional Firebase, Twilio, and SendGrid credentials for notification delivery
-- Optional Mapbox token for the public dashboard heatmap
+- Optional MapLibre style URL for the public dashboard map
 
-If optional services are not configured, the app falls back where the code supports it: local photo storage, synchronous/best-effort notifications, skipped Redis-backed report rate limiting, and a dashboard list view instead of a Mapbox map.
+If optional services are not configured, the app falls back where the code supports it: local photo storage, synchronous/best-effort notifications, skipped Redis-backed report rate limiting, and a default OpenStreetMap raster basemap for the dashboard.
 
 ## API Base URLs
 
@@ -111,7 +111,7 @@ npm run dev
 The public dashboard reads:
 
 - `VITE_API_URL`, defaulting to `http://localhost:3000/api/v1`
-- `VITE_MAPBOX_TOKEN` or `VITE_MAPBOX_ACCESS_TOKEN`, optional
+- `VITE_MAPLIBRE_STYLE_URL`, optional MapLibre style URL
 
 Dashboard API endpoints are public and require no JWT:
 
@@ -120,7 +120,7 @@ Dashboard API endpoints are public and require no JWT:
 - `GET /api/v1/dashboard/wards`
 - `GET /api/v1/dashboard/status/:reportId`
 
-Without a Mapbox token, the dashboard shows an open-ticket list fallback instead of the map.
+Without a custom MapLibre style URL, the dashboard uses the built-in OpenStreetMap raster basemap.
 
 ## Roles and Permissions
 
@@ -170,7 +170,7 @@ Public registration accepts only `citizen` and `worker`. Staff roles (`engineer`
 |---|---|---|
 | Admin | `VITE_API_URL` | Backend API base URL |
 | Dashboard | `VITE_API_URL` | Backend API base URL |
-| Dashboard | `VITE_MAPBOX_TOKEN` / `VITE_MAPBOX_ACCESS_TOKEN` | Mapbox heatmap rendering |
+| Dashboard | `VITE_MAPLIBRE_STYLE_URL` | Optional MapLibre map style |
 | Mobile | `expo.extra.API_BASE_URL` in `mobile/app.json` | Backend API base URL |
 
 ## Main API Surface
@@ -284,5 +284,5 @@ Before photos are written during report submission. After photos are written whe
 - Staff auth: sign in as an engineer/supervisor/commissioner/admin in the admin console and confirm Queue, Escalations, Analytics, and Settings load from the API.
 - Assignment flow: from admin Queue/Assign, assign an open ticket to a worker and confirm it appears in the worker mobile ticket list.
 - Resolution flow: from the worker mobile app, add an after photo, mark the ticket resolved, and confirm public tracking shows `resolved`.
-- Dashboard: run the dashboard, confirm stats and ward table load, verify the Mapbox heatmap when a token is configured or the list fallback when it is not.
+- Dashboard: run the dashboard, confirm stats and ward table load, and verify the MapLibre open-ticket map renders ticket clusters.
 - Offline queue: disable network during mobile report or resolution submission, confirm the item is queued, restore network, and confirm retry clears or updates the queue state.

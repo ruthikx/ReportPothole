@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
+import maplibregl from 'maplibre-gl';
 import {
   AlertTriangle,
   BarChart3,
@@ -14,13 +14,34 @@ import {
 import {
   API_BASE_URL,
   getDashboardStats,
-  getOpenTicketHeatmap,
+  getOpenTicketMapData,
   getReportStatus,
   getWardStats,
 } from './api.js';
 
-const MAPBOX_TOKEN =
-  import.meta.env.VITE_MAPBOX_TOKEN || import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
+const DEFAULT_MAP_STYLE = {
+  version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  sources: {
+    osm: {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      attribution: '&copy; OpenStreetMap contributors',
+    },
+  },
+  layers: [
+    {
+      id: 'osm-tiles',
+      type: 'raster',
+      source: 'osm',
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
+
+const MAPLIBRE_STYLE = import.meta.env.VITE_MAPLIBRE_STYLE_URL || DEFAULT_MAP_STYLE;
 
 const EMPTY_STATS = {
   totalReports: 0,
@@ -55,6 +76,14 @@ const formatDate = (value) => {
 };
 
 const normalizeStatus = (status) => statusLabels[status] || status || 'Unknown';
+
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 function StatusBadge({ status }) {
   return <span className={`status-badge status-${status || 'unknown'}`}>{normalizeStatus(status)}</span>;
@@ -101,66 +130,71 @@ function RatioBar({ resolved, pending }) {
   );
 }
 
-function MapboxHeatmap({ collection, features }) {
+function MapLibreTicketMap({ collection, features }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
 
   useEffect(() => {
-    if (!MAPBOX_TOKEN || !containerRef.current || features.length === 0) {
+    if (!containerRef.current || features.length === 0) {
       return undefined;
     }
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-
     const firstPoint = features[0].geometry.coordinates;
-    const map = new mapboxgl.Map({
+    const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/light-v11',
+      style: MAPLIBRE_STYLE,
       center: firstPoint,
       zoom: 11,
     });
     mapRef.current = map;
 
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
     map.on('load', () => {
       map.addSource('open-tickets', {
         type: 'geojson',
         data: collection,
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 42,
       });
 
       map.addLayer({
-        id: 'open-ticket-heat',
-        type: 'heatmap',
+        id: 'open-ticket-clusters',
+        type: 'circle',
         source: 'open-tickets',
-        maxzoom: 15,
+        filter: ['has', 'point_count'],
         paint: {
-          'heatmap-weight': [
-            'interpolate',
-            ['linear'],
-            ['coalesce', ['get', 'upvotes'], 1],
-            1,
-            0.35,
-            10,
-            1,
-          ],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.8, 15, 1.8],
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 12, 15, 32],
-          'heatmap-color': [
-            'interpolate',
-            ['linear'],
-            ['heatmap-density'],
-            0,
-            'rgba(14, 165, 233, 0)',
-            0.25,
+          'circle-color': [
+            'step',
+            ['get', 'point_count'],
             '#22c55e',
-            0.5,
+            10,
             '#eab308',
-            0.75,
+            25,
             '#f97316',
-            1,
+            50,
             '#dc2626',
           ],
+          'circle-radius': ['step', ['get', 'point_count'], 18, 10, 24, 25, 30, 50, 38],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.92,
+        },
+      });
+
+      map.addLayer({
+        id: 'open-ticket-cluster-count',
+        type: 'symbol',
+        source: 'open-tickets',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['Open Sans Semibold'],
+          'text-size': 12,
+        },
+        paint: {
+          'text-color': '#ffffff',
         },
       });
 
@@ -168,7 +202,7 @@ function MapboxHeatmap({ collection, features }) {
         id: 'open-ticket-points',
         type: 'circle',
         source: 'open-tickets',
-        minzoom: 10,
+        filter: ['!', ['has', 'point_count']],
         paint: {
           'circle-radius': [
             'interpolate',
@@ -191,16 +225,34 @@ function MapboxHeatmap({ collection, features }) {
             '#475569',
           ],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1.5,
+          'circle-stroke-width': 1.8,
           'circle-opacity': 0.9,
         },
       });
 
-      const bounds = new mapboxgl.LngLatBounds();
+      const bounds = new maplibregl.LngLatBounds();
       features.forEach((feature) => bounds.extend(feature.geometry.coordinates));
       if (!bounds.isEmpty()) {
         map.fitBounds(bounds, { padding: 60, maxZoom: 13 });
       }
+    });
+
+    map.on('click', 'open-ticket-clusters', (event) => {
+      const feature = event.features?.[0];
+      const clusterId = feature?.properties?.cluster_id;
+      const source = map.getSource('open-tickets');
+
+      if (clusterId == null || !source?.getClusterExpansionZoom) return;
+
+      source
+        .getClusterExpansionZoom(clusterId)
+        .then((zoom) => {
+          map.easeTo({
+            center: feature.geometry.coordinates,
+            zoom,
+          });
+        })
+        .catch(() => {});
     });
 
     map.on('click', 'open-ticket-points', (event) => {
@@ -210,20 +262,24 @@ function MapboxHeatmap({ collection, features }) {
       const coordinates = feature.geometry.coordinates.slice();
       const { reportId, status, ward, upvotes } = feature.properties;
 
-      new mapboxgl.Popup()
+      new maplibregl.Popup()
         .setLngLat(coordinates)
         .setHTML(
-          `<strong>${reportId}</strong><br/>${normalizeStatus(status)}<br/>${ward || 'Unassigned'} ward<br/>${upvotes || 0} upvotes`
+          `<strong>${escapeHtml(reportId || 'Unlabeled report')}</strong><br/>${escapeHtml(
+            normalizeStatus(status)
+          )}<br/>${escapeHtml(ward || 'Unassigned')} ward<br/>${formatNumber(upvotes)} upvotes`
         )
         .addTo(map);
     });
 
-    map.on('mouseenter', 'open-ticket-points', () => {
-      map.getCanvas().style.cursor = 'pointer';
-    });
+    ['open-ticket-clusters', 'open-ticket-points'].forEach((layerId) => {
+      map.on('mouseenter', layerId, () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
 
-    map.on('mouseleave', 'open-ticket-points', () => {
-      map.getCanvas().style.cursor = '';
+      map.on('mouseleave', layerId, () => {
+        map.getCanvas().style.cursor = '';
+      });
     });
 
     return () => {
@@ -232,7 +288,7 @@ function MapboxHeatmap({ collection, features }) {
     };
   }, [collection, features]);
 
-  return <div className="map-canvas" ref={containerRef} aria-label="Open ticket heatmap" />;
+  return <div className="map-canvas" ref={containerRef} aria-label="Open ticket MapLibre map" />;
 }
 
 function TicketListFallback({ features, reason }) {
@@ -275,32 +331,31 @@ function TicketListFallback({ features, reason }) {
   );
 }
 
-function HeatmapSection({ heatmap }) {
+function MapSection({ collection }) {
   const features = useMemo(() => {
-    return (heatmap?.features || []).filter(
+    return (collection?.features || []).filter(
       (feature) =>
         feature?.geometry?.type === 'Point' &&
         Array.isArray(feature.geometry.coordinates) &&
         feature.geometry.coordinates.length === 2
     );
-  }, [heatmap]);
+  }, [collection]);
 
-  const shouldShowMap = Boolean(MAPBOX_TOKEN && features.length > 0);
-  const reason = !MAPBOX_TOKEN
-    ? 'Mapbox token is not configured. Showing the open-ticket list instead.'
-    : 'No open tickets have coordinates for the map. Showing the list view instead.';
+  const mapCollection = useMemo(() => ({ type: 'FeatureCollection', features }), [features]);
+  const shouldShowMap = features.length > 0;
+  const reason = 'No open tickets have coordinates for the map. Showing the list view instead.';
 
   return (
     <section className="dashboard-section">
       <div className="section-heading">
         <div>
           <span className="eyebrow">Open tickets</span>
-          <h2>Heatmap</h2>
+          <h2>MapLibre map</h2>
         </div>
         <span className="section-count">{formatNumber(features.length)} active locations</span>
       </div>
       {shouldShowMap ? (
-        <MapboxHeatmap collection={heatmap} features={features} />
+        <MapLibreTicketMap collection={mapCollection} features={features} />
       ) : (
         <TicketListFallback features={features} reason={reason} />
       )}
@@ -454,7 +509,7 @@ function LookupPanel() {
 
 export default function App() {
   const [stats, setStats] = useState(EMPTY_STATS);
-  const [heatmap, setHeatmap] = useState({ type: 'FeatureCollection', features: [] });
+  const [ticketMap, setTicketMap] = useState({ type: 'FeatureCollection', features: [] });
   const [wards, setWards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -465,14 +520,14 @@ export default function App() {
     setError('');
 
     try {
-      const [nextStats, nextHeatmap, nextWards] = await Promise.all([
+      const [nextStats, nextTicketMap, nextWards] = await Promise.all([
         getDashboardStats(),
-        getOpenTicketHeatmap(),
+        getOpenTicketMapData(),
         getWardStats(),
       ]);
 
       setStats({ ...EMPTY_STATS, ...nextStats });
-      setHeatmap(nextHeatmap || { type: 'FeatureCollection', features: [] });
+      setTicketMap(nextTicketMap || { type: 'FeatureCollection', features: [] });
       setWards(nextWards);
       setUpdatedAt(new Date());
     } catch (err) {
@@ -543,7 +598,7 @@ export default function App() {
         <LookupPanel />
       </section>
 
-      <HeatmapSection heatmap={heatmap} />
+      <MapSection collection={ticketMap} />
       <WardTable wards={wards} />
 
       <footer>
