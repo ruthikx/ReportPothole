@@ -6,6 +6,7 @@ backend/uploads/
 
 mobile/.expo/
 mobile/dist/
+mobile/.env
 
 npm-debug.log*
 yarn-debug.log*
