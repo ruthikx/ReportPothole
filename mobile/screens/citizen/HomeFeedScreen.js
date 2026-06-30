@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -69,7 +70,8 @@ const HomeFeedScreen = ({ navigation }) => {
     <View style={styles.header}>
       <View style={styles.brandRow}>
         <View style={styles.logo}>
-          <Ionicons name="construct" size={18} color="#1D160F" />
+          {/* <Ionicons name="construct" size={18} color="#1D160F" /> */}
+          <Image source={require('../../assets/logo.png')} style={{ width: 38, height: 38 }} />
         </View>
         <Text style={styles.brand}>Pothole</Text>
       </View>

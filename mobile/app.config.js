@@ -1,10 +1,15 @@
+import 'dotenv/config';
+
 export default {
   expo: {
     name: "Pothole Reporter",
     slug: "pothole-app",
     version: "1.0.0",
     orientation: "portrait",
+    icon: "./assets/icon.png",
     splash: {
+      image: "./assets/splash.png",
+      resizeMode: "contain",
       backgroundColor: "#1a73e8"
     },
     plugins: [
@@ -23,6 +28,7 @@ export default {
       "expo-status-bar"
     ],
     ios: {
+      icon: "./assets/icon.png",
       supportsTablet: true,
       bundleIdentifier: "com.potholeapp.reporter",
       config: {
@@ -31,6 +37,7 @@ export default {
     },
     android: {
       adaptiveIcon: {
+        foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#1a73e8"
       },
       package: "com.potholeapp.reporter",
@@ -46,7 +53,10 @@ export default {
       ]
     },
     extra: {
-      API_BASE_URL: process.env.API_BASE_URL || "http://localhost:3000/api/v1"
+      API_BASE_URL: process.env.API_BASE_URL || "http://localhost:3000/api/v1",
+      eas: {
+        projectId: "89159326-9c4c-4aa1-9b90-ec49e0852d88"
+      }
     }
   }
 };
