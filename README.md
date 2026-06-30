@@ -1,56 +1,87 @@
 # PathHole Pothole Reporting App
 
-PathHole is a Node/Express, MongoDB, React Native (Expo), and Vite monorepo for reporting potholes, assigning municipal repair work, tracking resolution, and publishing public dashboard metrics.
+PathHole is a pothole reporting and repair-tracking monorepo. It includes an Express/MongoDB backend, an Expo mobile app, a Vite municipal admin console, and a Vite public dashboard.
+
+Citizens can report potholes with photos and location data, view nearby/community reports, upvote duplicates, and track a report ID. Municipal staff can assign tickets, monitor SLA escalations, resolve work with after photos, and view public performance metrics.
 
 ## Project Structure
 
 ```text
 pothole-app/
-|-- backend/       # Express API, Mongoose models, Jest tests
-|-- mobile/        # Expo app for public reporting, staff login, worker/admin flows
+|-- backend/       # Express API, Mongoose models, services, Jest tests
+|-- mobile/        # Expo app for citizens, workers, and mobile staff flows
 |-- admin/         # Vite staff admin console
 `-- dashboard/     # Vite public dashboard
 ```
 
-The backend is implemented with CommonJS (`require` and `module.exports`). The Vite frontends use ES modules.
+The backend uses CommonJS. The mobile app and Vite frontends use ES modules.
 
 ## Runtime Requirements
 
 - Node.js 18+
 - MongoDB for the backend API
-- Optional Redis for report rate limiting and BullMQ notification jobs
-- Optional S3-compatible AWS credentials for uploaded photo storage
-- Optional Firebase, Twilio, and SendGrid credentials for notification delivery
-- Optional MapLibre style URL for the public dashboard map
+- Redis is optional for report rate limiting and BullMQ notification jobs
+- ImageKit or AWS S3 credentials are optional for uploaded photo storage
+- Firebase, Twilio, and SendGrid credentials are optional for notification delivery
+- A MapLibre style URL is optional for the public dashboard map
 
-If optional services are not configured, the app falls back where the code supports it: local photo storage, synchronous/best-effort notifications, skipped Redis-backed report rate limiting, and a default OpenStreetMap raster basemap for the dashboard.
+When optional services are not configured, the app falls back where supported: local photo storage, skipped Redis-backed report rate limiting, synchronous/best-effort notifications, and an OpenStreetMap raster basemap for the dashboard.
 
-## API Base URLs
+## Quick Start
 
-The backend mounts the same API router at both base paths:
+Install and run each package from its own directory. The root `package.json` is not configured as an npm workspace and its `npm test` script is only a placeholder.
 
-- `http://localhost:3000/api/v1`
-- `http://localhost:3000/api`
+```bash
+cd backend
+npm install
+```
 
-Examples in this document use `/api/v1`. The mobile app, admin console, and dashboard default to `http://localhost:3000/api/v1`.
+Create `backend/.env`:
 
-## Commands
+```bash
+PORT=3000
+MONGO_URI=mongodb://127.0.0.1:27017/pathhole
+JWT_SECRET=replace-with-a-long-random-secret
+UPLOAD_STORAGE=local
+```
 
-Install and run each package from its own directory. The root `package.json` does not define a useful workspace test/build command.
+Start the API:
+
+```bash
+npm run dev
+```
+
+In separate terminals, start the clients as needed:
+
+```bash
+cd mobile && npm install && npm start
+cd admin && npm install && npm run dev
+cd dashboard && npm install && npm run dev
+```
+
+Default local URLs:
+
+- Backend API: `http://localhost:3000/api/v1`
+- Admin console: `http://localhost:5174`
+- Public dashboard: `http://localhost:5175`
+
+## Package Commands
 
 | App | Development | Build / production | Tests |
 |---|---|---|---|
-| Backend | `cd backend && npm install && npm run dev` | `npm start` | `npm test`, `npm run test:watch`, `npm run test:coverage` |
-| Mobile | `cd mobile && npm install && npm start` | `npm run build` exports Expo web to `dist/`; `npm run android`, `npm run ios`, and `npm run web` are also available | No automated mobile tests are defined |
-| Admin console | `cd admin && npm install && npm run dev` on port `5174` | `npm run build`, `npm run preview` on port `4174` | No automated admin tests are defined |
-| Public dashboard | `cd dashboard && npm install && npm run dev` on port `5175` | `npm run build`, `npm run preview` on port `4175` | No automated dashboard tests are defined |
+| Backend | `cd backend && npm run dev` | `npm start` | `npm test`, `npm run test:watch`, `npm run test:coverage` |
+| Mobile | `cd mobile && npm start` | `npm run build` exports Expo web to `dist/`; `npm run android`, `npm run ios`, and `npm run web` are also available | No automated mobile tests |
+| Admin console | `cd admin && npm run dev` on port `5174` | `npm run build`, `npm run preview` on port `4174` | No automated admin tests |
+| Public dashboard | `cd dashboard && npm run dev` on port `5175` | `npm run build`, `npm run preview` on port `4175` | No automated dashboard tests |
 
-Seed ward polygons with:
+Seed ward polygons after creating `backend/wards.geojson`:
 
 ```bash
 cd backend
 npm run seed
 ```
+
+The seed script expects a GeoJSON `FeatureCollection` of Polygon features. It reads ward names from `properties.name` or `properties.ward_name`, and SLA hours from `properties.sla_hours` when present.
 
 Run a standalone notification worker only when you do not want the API process to own the worker:
 
@@ -59,20 +90,29 @@ cd backend
 node workers/notificationWorker.js
 ```
 
-## Backend Setup
+## API Base URLs
 
-Create `backend/.env` from `backend/.env.example`, set at least `MONGO_URI` or `MONGODB_URI`, and set a real `JWT_SECRET`.
+The backend mounts the same router at both base paths:
+
+- `http://localhost:3000/api/v1`
+- `http://localhost:3000/api`
+
+Examples use `/api/v1`. The mobile app, admin console, and dashboard default to `http://localhost:3000/api/v1`.
+
+## Backend
+
+The server listens on `PORT` or `3000`. It serves local uploads from `/uploads` when remote storage is not enabled.
+
+Minimum environment:
 
 ```bash
-cd backend
-cp .env.example .env
-npm install
-npm run dev
+MONGO_URI=mongodb://127.0.0.1:27017/pathhole
+JWT_SECRET=replace-with-a-long-random-secret
 ```
 
-The server listens on `PORT` or `3000`. It serves local uploads from `/uploads` when S3 storage is not enabled.
+There is no tracked `.env.example` in this repo, so create `backend/.env` manually. The backend has an insecure development fallback for `JWT_SECRET`, but a real secret should be set for any shared environment.
 
-## Mobile Setup
+## Mobile App
 
 ```bash
 cd mobile
@@ -80,7 +120,7 @@ npm install
 npm start
 ```
 
-Set `expo.extra.API_BASE_URL` in `mobile/app.json`. During Expo development, `mobile/services/api.js` rewrites `localhost` or `127.0.0.1` to the Expo host when possible, which helps physical devices reach the backend on the LAN.
+The Expo config is `mobile/app.config.js`. It reads `API_BASE_URL` from the environment and exposes it as `expo.extra.API_BASE_URL`, defaulting to `http://localhost:3000/api/v1`.
 
 Common values:
 
@@ -88,7 +128,17 @@ Common values:
 - iOS simulator or browser on the same machine: `http://localhost:3000/api/v1`
 - Physical device: `http://<your-machine-lan-ip>:3000/api/v1`
 
-## Admin Console Setup
+During Expo development, `mobile/services/api.js` rewrites `localhost` or `127.0.0.1` to the Expo host when possible, which helps physical devices reach the backend on the LAN.
+
+The mobile app includes:
+
+- Guest/citizen community feed, map, report, profile, and report tracking screens
+- Citizen registration and login
+- Worker ticket list and resolution flow with after-photo upload
+- Staff ticket listing, assignment, and escalation screens for engineer/supervisor/commissioner/admin roles
+- Offline queueing for report submissions and worker resolution updates, with retries on reconnect
+
+## Admin Console
 
 ```bash
 cd admin
@@ -96,11 +146,19 @@ npm install
 npm run dev
 ```
 
-The admin console reads `VITE_API_URL` and defaults to `http://localhost:3000/api/v1`. It stores the staff JWT in `localStorage` under `pothole_admin_token`.
+The admin console reads `VITE_API_URL` and defaults to `http://localhost:3000/api/v1`. It signs in through `POST /auth/admin/login`, stores the JWT in `localStorage` as `pothole_admin_token`, and stores the user as `pothole_admin_user`.
 
-The implemented console has Queue, Assign, Escalations, Analytics, and Settings views. Settings currently lists wards and staff users; staff/ward write operations exist in the backend API but are not fully surfaced as editable forms in this UI.
+Implemented views:
 
-## Dashboard Setup
+- Queue
+- Assign
+- Escalations
+- Analytics
+- Settings
+
+Settings lists wards, field workers, and staff users. It can create field workers through the backend API. Full editable ward/staff management routes exist on the backend but are not all surfaced as forms in the UI.
+
+## Public Dashboard
 
 ```bash
 cd dashboard
@@ -108,23 +166,18 @@ npm install
 npm run dev
 ```
 
-The public dashboard reads:
+The dashboard reads:
 
 - `VITE_API_URL`, defaulting to `http://localhost:3000/api/v1`
 - `VITE_MAPLIBRE_STYLE_URL`, optional MapLibre style URL
 
-Dashboard API endpoints are public and require no JWT:
+It displays monthly/all-time stats, resolution rate, average fix time, overdue work, public report lookup, recent active reports, a MapLibre open-ticket map, and ward performance. Without a custom MapLibre style URL, it uses the built-in OpenStreetMap raster basemap.
 
-- `GET /api/v1/dashboard/stats`
-- `GET /api/v1/dashboard/heatmap`
-- `GET /api/v1/dashboard/wards`
-- `GET /api/v1/dashboard/status/:reportId`
-
-Without a custom MapLibre style URL, the dashboard uses the built-in OpenStreetMap raster basemap.
+The dashboard also contains a hard-coded APK download link in `dashboard/src/App.jsx`.
 
 ## Roles and Permissions
 
-Actual user roles are:
+User roles are:
 
 - `citizen`
 - `worker`
@@ -133,9 +186,9 @@ Actual user roles are:
 - `commissioner`
 - `admin`
 
-Role ranks in `backend/middleware/auth.js` are `citizen < worker < engineer < supervisor < commissioner/admin`. `admin` is treated as an alias of `commissioner`: both have rank `4`, and permission checks generally allow either role wherever the other is required. `admin` is not a higher superuser role than `commissioner`.
+Role ranks in `backend/middleware/auth.js` are `citizen < worker < engineer < supervisor < commissioner/admin`. `admin` is treated as an alias of `commissioner`; both have rank `4`.
 
-Public registration accepts only `citizen` and `worker`. Staff roles (`engineer`, `supervisor`, `commissioner`, `admin`) are created through protected admin routes by an existing staff user with sufficient rank, so the first staff/admin account must be seeded or inserted outside the public registration flow.
+Public registration creates citizen accounts only. Workers are created through protected `/admin/workers` routes by an engineer-or-higher user. Staff roles (`engineer`, `supervisor`, `commissioner`, `admin`) are created through protected `/admin/users` routes by a supervisor-or-higher user with sufficient role rank. The first staff/admin account must be seeded or inserted outside the public registration flow.
 
 ## Environment Variables
 
@@ -154,11 +207,12 @@ Public registration accepts only `citizen` and `worker`. Staff roles (`engineer`
 | `NOTIFICATION_QUEUE_BACKOFF_MS` | No | Exponential backoff delay, default `5000` |
 | `NOTIFICATION_WORKER_CONCURRENCY` | No | BullMQ worker concurrency, default `5` |
 | `ENABLE_NOTIFICATION_WORKER` | No | Allows worker startup while `NODE_ENV=test`; mainly useful for tests |
-| `UPLOAD_STORAGE` | No | Set to `imagekit` for ImageKit uploads or `s3` for S3 uploads; otherwise local storage is used unless real S3 credentials are present |
+| `UPLOAD_STORAGE` | No | `local`, `imagekit`, or `s3`. Real S3 credentials also enable S3 even if unset |
 | `IMAGEKIT_PRIVATE_KEY` | For ImageKit | Private API key for server-side ImageKit uploads |
-| `IMAGEKIT_URL_ENDPOINT` / `IMAGE_KIT_URL_ENDPOINT` | For ImageKit paths | Optional ImageKit delivery endpoint used when stored photo values are relative ImageKit paths |
+| `IMAGE_KIT_BASE_URL` | No | Optional ImageKit API base URL override |
 | `IMAGEKIT_UPLOAD_FOLDER` | No | ImageKit media library folder, defaults to `/pothole-app/uploads` |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET` | For S3 | S3 upload and cleanup support |
+| `IMAGEKIT_URL_ENDPOINT` / `IMAGE_KIT_URL_ENDPOINT` / `IMAGEKIT_ENDPOINT` / `IMAGE_KIT_ENDPOINT` | For ImageKit URLs | Optional ImageKit delivery endpoint used to resolve stored ImageKit paths |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET` | For S3 | S3 upload, signed URL, and cleanup support |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` / `FIREBASE_SA_KEY` | For FCM | Firebase service account JSON string |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` / `TWILIO_FROM_NUMBER` | For SMS | Twilio SMS delivery |
 | `SENDGRID_API_KEY`, `EMAIL_FROM` | For email | SendGrid email delivery |
@@ -171,7 +225,9 @@ Public registration accepts only `citizen` and `worker`. Staff roles (`engineer`
 | Admin | `VITE_API_URL` | Backend API base URL |
 | Dashboard | `VITE_API_URL` | Backend API base URL |
 | Dashboard | `VITE_MAPLIBRE_STYLE_URL` | Optional MapLibre map style |
-| Mobile | `expo.extra.API_BASE_URL` in `mobile/app.json` | Backend API base URL |
+| Mobile | `API_BASE_URL` | Read by `mobile/app.config.js` and exposed as `expo.extra.API_BASE_URL` |
+
+For EAS production builds, `mobile/eas.json` sets `API_BASE_URL` to `https://reportpothole.onrender.com/api/v1`.
 
 ## Main API Surface
 
@@ -179,34 +235,47 @@ All routes below are available under both `/api/v1` and `/api`.
 
 ### Auth
 
-- `POST /auth/register` - public registration for `citizen` or `worker`
-- `POST /auth/login` - login and return JWT
+- `POST /auth/register` - public citizen registration
+- `POST /auth/login` - login for any account
+- `POST /auth/admin/login` - login for engineer/supervisor/commissioner/admin portal access
 - `POST /auth/refresh` - refresh an existing JWT
 - `POST /auth/device` - update citizen `fcmToken` and/or `deviceId`
 
 ### Reports
 
 - `POST /reports` - public or authenticated multipart report submission. Accepts `photo` or up to five `photos`, plus `lat`, `lng`, optional `description`, `address`, `deviceId`, and `fcmToken`.
-- `GET /reports/:reportId` - public report status and public event history
-- `POST /reports/:id/upvote` - public duplicate/upvote count, where `id` may be a Mongo ticket id or `reportId`
+- `GET /reports` - public report feed with `page`, `limit`, optional comma-separated `status`, and `mine=true` for authenticated citizen reports.
+- `GET /reports/mine` - authenticated citizen report list.
+- `GET /reports/:reportId` - public report status and public event history.
+- `POST /reports/:id/upvote` - public duplicate/upvote count, where `id` may be a Mongo ticket id or `reportId`.
 
 ### Tickets
 
 - `GET /tickets` - `worker` and above. Workers are filtered to their assigned tickets; staff can filter by `status`, `ward`, `page`, and `limit`.
-- `GET /tickets/overdue` - `supervisor` and above
-- `GET /tickets/meta/workers` - `engineer` and above
-- `GET /tickets/meta/wards` - `engineer` and above
-- `GET /tickets/meta/users` - `supervisor` and above
-- `GET /tickets/:id/history` - assigned worker or staff
-- `GET /tickets/:id` - `worker` and above
-- `PATCH /tickets/:id/assign` - `engineer` and above; body `{ "workerId": "..." }`
-- `PATCH /tickets/:id/status` - `worker` and above; accepts status `assigned`, `in_progress`, or `resolved`, and optional multipart `afterPhoto`
+- `GET /tickets/overdue` - `supervisor` and above.
+- `GET /tickets/meta/workers` - `engineer` and above.
+- `GET /tickets/meta/wards` - `engineer` and above.
+- `GET /tickets/meta/users` - `supervisor` and above.
+- `GET /tickets/:id/history` - assigned worker or staff.
+- `GET /tickets/:id` - `worker` and above.
+- `PATCH /tickets/:id/assign` - `engineer` and above; body `{ "workerId": "..." }`.
+- `PATCH /tickets/:id/status` - `worker` and above; accepts status `assigned`, `in_progress`, or `resolved`, and optional multipart `afterPhoto`.
+
+### Dashboard
+
+Dashboard endpoints are public:
+
+- `GET /dashboard/stats`
+- `GET /dashboard/heatmap`
+- `GET /dashboard/wards`
+- `GET /dashboard/status/:reportId`
 
 ### Admin and Stats
 
-- `GET /stats/summary`, `GET /stats/by-ward`, `GET /stats/heatmap` - `admin`/`commissioner` equivalent access through role-rank checks
-- `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/:id` - staff management for `supervisor` and above, bounded by role rank
-- `GET /admin/wards`, `POST /admin/wards`, `PATCH /admin/wards/:id`, `PATCH /admin/wards/:id/engineer`, `PATCH /admin/wards/:id/sla` - ward and SLA management
+- `GET /stats/summary`, `GET /stats/by-ward`, `GET /stats/heatmap` - commissioner/admin-equivalent access through role-rank checks.
+- `GET /admin/workers`, `POST /admin/workers`, `PATCH /admin/workers/:id` - field worker management.
+- `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/:id` - staff management, bounded by actor role rank.
+- `GET /admin/wards`, `POST /admin/wards`, `PATCH /admin/wards/:id`, `PATCH /admin/wards/:id/engineer`, `PATCH /admin/wards/:id/sla` - ward and SLA management.
 
 ## Ticket Schema
 
@@ -220,20 +289,21 @@ The implemented `Ticket` model stores:
     coordinates: [lng, lat]
   },
   ward: ObjectId,                 // Ward reference
+  wardName: String,               // fallback/display ward name
   address: String,
   photos: {
-    before: [String],             // upload keys, not guaranteed public URLs
+    before: [String],             // upload keys or remote URLs
     after: [String]
   },
   imageHashes: {
-    before: [String],             // perceptual hashes when image bytes are readable
+    before: [String],
     after: [String]
   },
   description: String,
   status: 'open' | 'assigned' | 'in_progress' | 'resolved',
   assignedTo: ObjectId,           // User reference
   reportedBy: ObjectId,           // User reference when authenticated
-  duplicateOf: ObjectId,          // currently modeled, not actively populated by report flow
+  duplicateOf: ObjectId,          // modeled, not actively populated by report flow
   upvotes: Number,
   slaDeadline: Date,
   escalationLevel: Number,        // 0..3
@@ -243,7 +313,16 @@ The implemented `Ticket` model stores:
 }
 ```
 
-Before photos are written during report submission. After photos are written when a worker/staff member updates a ticket status with `afterPhoto`. Image hashes are used for duplicate detection when the upload is local or the backend has the uploaded bytes in memory, including ImageKit uploads. S3-only metadata is skipped for hashing.
+Before photos are written during report submission. After photos are written when a worker/staff member updates a ticket status with `afterPhoto`. Image hashes are used for duplicate detection when image bytes are available to the backend process. S3-only metadata is skipped for hashing.
+
+## Implemented Behavior Notes
+
+- Duplicate detection first checks for an unresolved ticket within 50 meters, then checks image hashes within 100 meters when a hash can be computed.
+- Report IDs come from the Mongo `Counter` model and use the `RPT-00001` format.
+- Ward assignment uses geospatial lookup against `Ward.boundary`. If no ward polygon matches, the app may infer/store a `wardName` from address/description data.
+- SLA deadlines use the matched ward's `slaHours` or default to `168` hours.
+- A daily cron inside the backend runs escalation at `06:00` server time and increments overdue unresolved tickets up to level `3`.
+- Mobile offline queue stores failed report submissions and worker resolution updates in AsyncStorage, retries on reconnect, and marks items failed after three retries while keeping them on the device.
 
 ## Notification Queue Behavior
 
@@ -254,27 +333,19 @@ Before photos are written during report submission. After photos are written whe
 - Queue jobs default to `3` attempts with exponential backoff starting at `5000ms`, remove completed jobs, and keep failed jobs.
 - If enqueueing fails, the backend logs the error and falls back to synchronous delivery.
 - The API process starts a notification worker outside `NODE_ENV=test`. A standalone worker can also be started with `node workers/notificationWorker.js`.
-- Delivery is best effort. FCM requires a Firebase service account and user `fcmToken`; SMS requires Twilio credentials and user `phone`; email requires SendGrid credentials and user `email`.
+- Delivery is best effort. FCM requires a Firebase service account and user `fcmToken`; SMS requires Twilio credentials, a Twilio sender, and user `phone`; email requires SendGrid credentials and user `email`.
 
-## Implemented Behavior Notes
+## Known Limitations and Setup Notes
 
-- Duplicate detection first checks for an unresolved ticket within 50 meters, then checks image hashes within 100 meters when a hash can be computed.
-- Report IDs come from the Mongo `Counter` model and use the `RPT-00001` format.
-- Ward assignment uses geospatial lookup against `Ward.boundary`.
-- SLA deadlines use the matched ward's `slaHours` or default to `168` hours.
-- A daily cron inside the backend runs escalation at `06:00` server time and increments overdue unresolved tickets up to level `3`.
-- Mobile offline queue stores failed report submissions and worker resolution updates in AsyncStorage, retries on reconnect, and marks items failed after three retries while keeping them on the device.
-
-## Known Limitations
-
-- There is no public first-admin bootstrap endpoint; create the first staff account through seed data, direct database insertion, or a trusted internal script.
+- There is no public first-admin bootstrap endpoint. Create the first staff account through seed data, direct database insertion, or a trusted internal script.
+- There is no tracked `backend/.env.example`.
 - Redis-backed report rate limiting is skipped if Redis is not configured or errors. The global Express rate limiter still runs in-process.
 - Ticket status updates require a worker-or-higher role but do not currently verify that a worker is assigned to that specific ticket.
-- S3 upload keys are stored on tickets and resolved to signed URLs for public/mobile feeds.
-- Image duplicate detection is unavailable for S3-only uploads unless bytes are available to the backend process; ImageKit uploads keep bytes in memory during request processing, so hashing still runs.
-- Admin Settings is mostly read-only in the Vite UI even though backend staff and ward mutation routes exist.
+- Image duplicate detection is unavailable for S3-only uploads unless bytes are available to the backend process. ImageKit uploads keep bytes in memory during request processing, so hashing still runs.
+- Admin Settings can create workers and list wards/staff, but not every backend staff/ward mutation route has an editable UI form.
 - Automated tests exist for the backend only. Admin, dashboard, and mobile currently rely on builds and manual QA.
-- The root package is not configured as an npm workspace and its `npm test` script is a placeholder that exits with failure.
+- The root package is not configured as an npm workspace.
+- `mobile/app.config.js` references `./assets/splash.png`, while the tracked asset is currently `mobile/assets/splash.png.png`; rename the asset or update the config if Expo reports a missing splash image.
 
 ## Manual QA Checklist
 
@@ -282,6 +353,7 @@ Before photos are written during report submission. After photos are written whe
 - Public report flow: submit a report from the mobile app with a photo and location; confirm an `RPT-` id is returned and `Track` can load it.
 - Duplicate/upvote flow: submit or upvote the same nearby report and confirm the existing report's `upvotes` increases.
 - Staff auth: sign in as an engineer/supervisor/commissioner/admin in the admin console and confirm Queue, Escalations, Analytics, and Settings load from the API.
+- Worker creation: create a field worker from admin Settings and confirm the user appears in the worker list.
 - Assignment flow: from admin Queue/Assign, assign an open ticket to a worker and confirm it appears in the worker mobile ticket list.
 - Resolution flow: from the worker mobile app, add an after photo, mark the ticket resolved, and confirm public tracking shows `resolved`.
 - Dashboard: run the dashboard, confirm stats and ward table load, and verify the MapLibre open-ticket map renders ticket clusters.
