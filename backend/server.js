@@ -30,7 +30,10 @@ if (!process.env.JWT_SECRET) {
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+app.set('trust proxy', 1);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
