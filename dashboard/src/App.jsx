@@ -10,14 +10,17 @@ import {
   RefreshCw,
   Search,
   TicketCheck,
+  Wrench,
 } from 'lucide-react';
 import {
   API_BASE_URL,
   getDashboardStats,
   getOpenTicketMapData,
+  getRecentReports,
   getReportStatus,
   getWardStats,
 } from './api.js';
+import pathholeLogo from './assets/pathhole-logo.jpg';
 
 const DEFAULT_MAP_STYLE = {
   version: 8,
@@ -77,6 +80,31 @@ const formatDate = (value) => {
 
 const normalizeStatus = (status) => statusLabels[status] || status || 'Unknown';
 
+const relativeTime = (value) => {
+  if (!value) return 'Recently';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Recently';
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.round(diffMs / 60000));
+  if (diffMinutes < 60) return `${diffMinutes || 1} min ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+
+  return formatDate(value);
+};
+
+const getTicketImage = (ticket) => (
+  ticket?.thumbnailUrl ||
+  ticket?.photoUrls?.before?.[0] ||
+  ticket?.photoUrls?.after?.[0] ||
+  null
+);
+
 const escapeHtml = (value) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -87,6 +115,14 @@ const escapeHtml = (value) =>
 
 function StatusBadge({ status }) {
   return <span className={`status-badge status-${status || 'unknown'}`}>{normalizeStatus(status)}</span>;
+}
+
+function TicketThumbnail({ src, alt, size = 'medium' }) {
+  return src ? (
+    <img className={`ticket-thumb ticket-thumb-${size}`} src={src} alt={alt} loading="lazy" />
+  ) : (
+    <span className={`ticket-thumb-placeholder ticket-thumb-${size}`}>No image</span>
+  );
 }
 
 function StatCard({ icon: Icon, label, value, detail, tone }) {
@@ -260,14 +296,21 @@ function MapLibreTicketMap({ collection, features }) {
       if (!feature) return;
 
       const coordinates = feature.geometry.coordinates.slice();
-      const { reportId, status, ward, upvotes } = feature.properties;
+      const { reportId, status, ward, upvotes, address, thumbnailUrl, locationName } = feature.properties;
+      const imageHtml = thumbnailUrl
+        ? `<img class="map-popup-image" src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(
+            reportId ? `Pothole report ${reportId}` : 'Pothole report image'
+          )}" />`
+        : '';
 
       new maplibregl.Popup()
         .setLngLat(coordinates)
         .setHTML(
-          `<strong>${escapeHtml(reportId || 'Unlabeled report')}</strong><br/>${escapeHtml(
+          `<div class="map-popup-card">${imageHtml}<strong>${escapeHtml(
+            reportId || 'Unlabeled report'
+          )}</strong><span>${escapeHtml(address || locationName || 'Address not provided')}</span><small>${escapeHtml(
             normalizeStatus(status)
-          )}<br/>${escapeHtml(ward || 'Unassigned')} ward<br/>${formatNumber(upvotes)} upvotes`
+          )} &middot; ${escapeHtml(ward || 'Unassigned')} ward &middot; ${formatNumber(upvotes)} upvotes</small></div>`
         )
         .addTo(map);
     });
@@ -291,47 +334,89 @@ function MapLibreTicketMap({ collection, features }) {
   return <div className="map-canvas" ref={containerRef} aria-label="Open ticket MapLibre map" />;
 }
 
-function TicketListFallback({ features, reason }) {
-  const sorted = useMemo(() => {
-    return [...features].sort((a, b) => {
-      const escalationDiff = (b.properties.escalationLevel || 0) - (a.properties.escalationLevel || 0);
-      if (escalationDiff) return escalationDiff;
-      return (b.properties.upvotes || 0) - (a.properties.upvotes || 0);
-    });
-  }, [features]);
+function RecentReportsCard({ reports, activeCount }) {
+  const recentReports = useMemo(() => {
+    return [...reports]
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .slice(0, 4);
+  }, [reports]);
 
   return (
-    <div className="ticket-fallback">
-      <div className="fallback-note">
-        <AlertTriangle size={18} aria-hidden="true" />
-        <span>{reason}</span>
+    <section className="dashboard-section report-card-panel">
+      <div className="section-heading compact-heading">
+        <h2>Recent Reports</h2>
+        <span>{formatNumber(activeCount)} active</span>
       </div>
-      {sorted.length === 0 ? (
-        <p className="empty-state">No open tickets with usable coordinates are available.</p>
+      {recentReports.length === 0 ? (
+        <p className="empty-state compact-empty">No recent open reports are available.</p>
       ) : (
-        <div className="ticket-list">
-          {sorted.slice(0, 12).map((feature) => {
-            const [lng, lat] = feature.geometry.coordinates;
-            const props = feature.properties;
+        <div className="recent-report-list">
+          {recentReports.map((report) => {
+            const imageUrl = getTicketImage(report);
+            const wardName = report.wardName || report.ward?.name || 'Unassigned';
+
             return (
-              <article className="ticket-row" key={props.id || props.reportId}>
-                <div>
-                  <strong>{props.reportId || 'Unlabeled report'}</strong>
-                  <span>{props.ward || 'Unassigned'} ward</span>
+              <article className="recent-report-row" key={report.id || report.reportId}>
+                <TicketThumbnail
+                  src={imageUrl}
+                  alt={`Pothole report ${report.reportId || 'image'}`}
+                  size="medium"
+                />
+                <div className="recent-report-copy">
+                  <strong>{report.address || report.locationName || report.reportId || 'Reported location'}</strong>
+                  <span><MapPin size={13} aria-hidden="true" />{wardName}</span>
                 </div>
-                <StatusBadge status={props.status} />
-                <span>{formatNumber(props.upvotes)} upvotes</span>
-                <span>{lat.toFixed(4)}, {lng.toFixed(4)}</span>
+                <div className="recent-report-meta">
+                  <StatusBadge status={report.status} />
+                  <small>{relativeTime(report.createdAt)}</small>
+                </div>
               </article>
             );
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+function StatusSummary({ stats }) {
+  const items = [
+    {
+      label: 'Open',
+      value: stats.open,
+      className: 'open',
+      icon: AlertTriangle,
+    },
+    {
+      label: 'Assigned',
+      value: stats.assigned,
+      className: 'assigned',
+      icon: TicketCheck,
+    },
+    {
+      label: 'In progress',
+      value: stats.inProgress,
+      className: 'in-progress',
+      icon: Wrench,
+    },
+  ];
+
+  return (
+    <div className="status-summary" aria-label="Ticket status summary">
+      {items.map(({ label, value, className, icon: Icon }) => (
+        <article className={`status-summary-card status-summary-${className}`} key={label}>
+          <span aria-hidden="true"><Icon size={18} /></span>
+          <div>
+            <small>{label}</small>
+            <strong>{formatNumber(value)}</strong>
+          </div>
+        </article>
+      ))}
     </div>
   );
 }
 
-function MapSection({ collection }) {
+function ReportsMapRow({ collection, reports, stats }) {
   const features = useMemo(() => {
     return (collection?.features || []).filter(
       (feature) =>
@@ -343,22 +428,27 @@ function MapSection({ collection }) {
 
   const mapCollection = useMemo(() => ({ type: 'FeatureCollection', features }), [features]);
   const shouldShowMap = features.length > 0;
-  const reason = 'No open tickets have coordinates for the map. Showing the list view instead.';
 
   return (
-    <section className="dashboard-section">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Open tickets</span>
-          <h2>MapLibre map</h2>
-        </div>
-        <span className="section-count">{formatNumber(features.length)} active locations</span>
+    <section className="reports-map-row" aria-label="Recent reports and pothole map">
+      <RecentReportsCard reports={reports} activeCount={features.length || reports.length} />
+      <div className="map-column">
+        <section className="dashboard-section map-card-panel">
+          <div className="section-heading compact-heading">
+            <h2>Pothole Map</h2>
+            <span>{formatNumber(features.length)} locations</span>
+          </div>
+          {shouldShowMap ? (
+            <MapLibreTicketMap collection={mapCollection} features={features} />
+          ) : (
+            <div className="map-empty-state">
+              <AlertTriangle size={18} aria-hidden="true" />
+              <span>No open tickets have coordinates for the map.</span>
+            </div>
+          )}
+        </section>
+        <StatusSummary stats={stats} />
       </div>
-      {shouldShowMap ? (
-        <MapLibreTicketMap collection={mapCollection} features={features} />
-      ) : (
-        <TicketListFallback features={features} reason={reason} />
-      )}
     </section>
   );
 }
@@ -442,6 +532,10 @@ function LookupPanel() {
     }
   };
 
+  const beforeImages = ticket?.photoUrls?.before || [];
+  const afterImages = ticket?.photoUrls?.after || [];
+  const hasImages = beforeImages.length > 0 || afterImages.length > 0;
+
   return (
     <section className="dashboard-section lookup-section">
       <div className="section-heading">
@@ -471,11 +565,31 @@ function LookupPanel() {
           <div className="status-result-head">
             <div>
               <span>{ticket.reportId}</span>
-              <strong>{ticket.address || ticket.ward?.name || 'Reported location'}</strong>
+              <strong>{ticket.address || ticket.locationName || ticket.ward?.name || 'Reported location'}</strong>
             </div>
             <StatusBadge status={ticket.status} />
           </div>
+          {hasImages && (
+            <div className="status-gallery" aria-label="Report images">
+              {beforeImages.map((src, index) => (
+                <figure key={`before-${src}`}>
+                  <img src={src} alt={`Before repair for ${ticket.reportId}`} loading="lazy" />
+                  <figcaption>Before {beforeImages.length > 1 ? index + 1 : ''}</figcaption>
+                </figure>
+              ))}
+              {afterImages.map((src, index) => (
+                <figure key={`after-${src}`}>
+                  <img src={src} alt={`After repair for ${ticket.reportId}`} loading="lazy" />
+                  <figcaption>After {afterImages.length > 1 ? index + 1 : ''}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
           <dl>
+            <div>
+              <dt>Address</dt>
+              <dd>{ticket.address || ticket.locationName || 'Address not provided'}</dd>
+            </div>
             <div>
               <dt>Ward</dt>
               <dd>{ticket.ward?.name || 'Unassigned'}</dd>
@@ -510,6 +624,7 @@ function LookupPanel() {
 export default function App() {
   const [stats, setStats] = useState(EMPTY_STATS);
   const [ticketMap, setTicketMap] = useState({ type: 'FeatureCollection', features: [] });
+  const [recentReports, setRecentReports] = useState([]);
   const [wards, setWards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -520,14 +635,16 @@ export default function App() {
     setError('');
 
     try {
-      const [nextStats, nextTicketMap, nextWards] = await Promise.all([
+      const [nextStats, nextTicketMap, nextWards, nextRecentReports] = await Promise.all([
         getDashboardStats(),
         getOpenTicketMapData(),
         getWardStats(),
+        getRecentReports(4).catch(() => []),
       ]);
 
       setStats({ ...EMPTY_STATS, ...nextStats });
       setTicketMap(nextTicketMap || { type: 'FeatureCollection', features: [] });
+      setRecentReports(nextRecentReports);
       setWards(nextWards);
       setUpdatedAt(new Date());
     } catch (err) {
@@ -544,15 +661,32 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="dashboard-header">
-        <div>
-          <span className="eyebrow">Public dashboard</span>
-          <h1>PathHole reporting status</h1>
-          <p>Live municipal pothole report volume, resolution progress, ward performance, and public ticket lookup.</p>
+        <div className="brand-block">
+          <img
+            className="brand-art"
+            src={pathholeLogo}
+            alt="PathHole road marker over a pothole"
+          />
+          <div className="brand-copy">
+            <span className="eyebrow">Public dashboard</span>
+            <h1>PathHole command view</h1>
+            <p>Live road repair signal for report volume, resolution momentum, ward performance, and public ticket lookup.</p>
+            <div className="header-tags" aria-label="Dashboard signals">
+              <span><MapPin size={15} aria-hidden="true" /> Citywide road watch</span>
+              <span><TicketCheck size={15} aria-hidden="true" /> Spot it. Report it. Fix it.</span>
+            </div>
+          </div>
         </div>
-        <button type="button" className="refresh-button" onClick={loadDashboard} disabled={loading}>
-          {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-          <span>Refresh</span>
-        </button>
+        <div className="header-actions">
+          <div className="sync-panel" aria-live="polite">
+            <span>Latest sync</span>
+            <strong>{updatedAt ? formatDate(updatedAt) : 'Waiting for data'}</strong>
+          </div>
+          <button type="button" className="refresh-button" onClick={loadDashboard} disabled={loading}>
+            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+            <span>Refresh</span>
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -598,7 +732,7 @@ export default function App() {
         <LookupPanel />
       </section>
 
-      <MapSection collection={ticketMap} />
+      <ReportsMapRow collection={ticketMap} reports={recentReports} stats={stats} />
       <WardTable wards={wards} />
 
       <footer>

@@ -2,12 +2,47 @@ const express = require('express');
 const Ticket = require('../models/Ticket');
 const { listTicketEvents } = require('../services/ticketEvents');
 const { serializePublicReport } = require('../services/publicReports');
+const { generatePresignedUrl } = require('../services/uploadStorage');
 
 const router = express.Router();
 
 const startOfMonth = () => {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), 1);
+};
+
+const buildPhotoUrls = async (photoKeys = []) => (
+  await Promise.all(photoKeys.map((photo) => generatePresignedUrl(photo)))
+).filter(Boolean);
+
+const serializeDashboardFeature = async (ticket) => {
+  const beforePhotoUrls = await buildPhotoUrls(ticket.photos?.before || []);
+  const afterPhotoUrls = await buildPhotoUrls(ticket.photos?.after || []);
+  const ward = ticket.wardName || ticket.ward?.name || 'Unassigned';
+  const locationName = ticket.address || ward || 'Reported location';
+
+  return {
+    type: 'Feature',
+    geometry: ticket.location,
+    properties: {
+      id: ticket._id,
+      reportId: ticket.reportId,
+      status: ticket.status,
+      upvotes: ticket.upvotes,
+      escalationLevel: ticket.escalationLevel,
+      ward,
+      address: ticket.address,
+      description: ticket.description,
+      locationName,
+      createdAt: ticket.createdAt,
+      photos: ticket.photos,
+      photoUrls: {
+        before: beforePhotoUrls,
+        after: afterPhotoUrls,
+      },
+      thumbnailUrl: beforePhotoUrls[0] || afterPhotoUrls[0] || null,
+    },
+  };
 };
 
 router.get('/stats', async (req, res, next) => {
@@ -68,27 +103,32 @@ router.get('/heatmap', async (req, res, next) => {
   try {
     const tickets = await Ticket.find(
       { status: { $ne: 'resolved' }, location: { $exists: true } },
-      { location: 1, upvotes: 1, status: 1, reportId: 1, escalationLevel: 1, ward: 1, wardName: 1 }
+      {
+        location: 1,
+        upvotes: 1,
+        status: 1,
+        reportId: 1,
+        escalationLevel: 1,
+        ward: 1,
+        wardName: 1,
+        address: 1,
+        description: 1,
+        photos: 1,
+        createdAt: 1,
+      }
     )
       .populate('ward', 'name')
       .lean();
 
+    const features = await Promise.all(
+      tickets
+        .filter((ticket) => ticket.location?.coordinates?.length === 2)
+        .map(serializeDashboardFeature)
+    );
+
     res.json({
       type: 'FeatureCollection',
-      features: tickets
-        .filter((ticket) => ticket.location?.coordinates?.length === 2)
-        .map((ticket) => ({
-          type: 'Feature',
-          geometry: ticket.location,
-          properties: {
-            id: ticket._id,
-            reportId: ticket.reportId,
-            status: ticket.status,
-            upvotes: ticket.upvotes,
-            escalationLevel: ticket.escalationLevel,
-            ward: ticket.wardName || ticket.ward?.name || 'Unassigned',
-          },
-        })),
+      features,
     });
   } catch (err) {
     next(err);
