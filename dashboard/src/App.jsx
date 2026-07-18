@@ -486,14 +486,14 @@ function WardTable({ wards }) {
             ) : (
               wards.map((ward) => (
                 <tr key={ward._id}>
-                  <td><strong>{ward._id}</strong></td>
-                  <td>{formatNumber(ward.total)}</td>
-                  <td>{formatNumber(ward.open)}</td>
-                  <td>{formatNumber(ward.assigned)}</td>
-                  <td>{formatNumber(ward.inProgress)}</td>
-                  <td>{formatNumber(ward.resolved)}</td>
-                  <td>{formatNumber(ward.pending)}</td>
-                  <td>
+                  <td data-label="Ward"><strong>{ward._id}</strong></td>
+                  <td data-label="Total">{formatNumber(ward.total)}</td>
+                  <td data-label="Open">{formatNumber(ward.open)}</td>
+                  <td data-label="Assigned">{formatNumber(ward.assigned)}</td>
+                  <td data-label="In progress">{formatNumber(ward.inProgress)}</td>
+                  <td data-label="Resolved">{formatNumber(ward.resolved)}</td>
+                  <td data-label="Pending">{formatNumber(ward.pending)}</td>
+                  <td data-label="Resolution">
                     <div className="table-rate">
                       <span>{ward.resolutionRate || 0}%</span>
                       <i style={{ width: `${Math.min(100, Math.max(0, ward.resolutionRate || 0))}%` }} />
