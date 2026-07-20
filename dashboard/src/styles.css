@@ -259,8 +259,13 @@ img {
 }
 
 .download-button {
+  display: inline-flex;
+  width: 40px;
+  padding: 0;
+}
+
+.download-button span {
   display: none;
-  padding: 0 13px;
 }
 
 .sync-panel {
@@ -1319,7 +1324,12 @@ footer {
   }
 
   .download-button {
-    display: inline-flex;
+    width: auto;
+    padding: 0 13px;
+  }
+
+  .download-button span {
+    display: inline;
   }
 
   .ratio-panel,
