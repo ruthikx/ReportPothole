@@ -4,12 +4,18 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   Download,
+  FileSearch,
+  Home,
+  LayoutDashboard,
   Loader2,
+  Map as MapIcon,
   MapPin,
   RefreshCw,
   Search,
+  Smartphone,
   TicketCheck,
   Wrench,
 } from 'lucide-react';
@@ -148,23 +154,41 @@ function RatioBar({ resolved, pending }) {
   const pendingPercent = total ? 100 - resolvedPercent : 0;
 
   return (
-    <div className="ratio-panel">
+    <section className="ratio-panel">
       <div className="ratio-header">
         <div>
-          <span>Resolved vs pending</span>
-          <strong>{resolvedPercent}% resolved</strong>
+          <span>Network progress</span>
+          <strong>Resolution score</strong>
         </div>
-        <TicketCheck size={22} aria-hidden="true" />
+        <span className="live-label"><i /> Live</span>
+      </div>
+      <div className="ratio-body">
+        <div
+          className="resolution-ring"
+          style={{ '--progress': `${resolvedPercent * 3.6}deg` }}
+          aria-label={`${resolvedPercent}% of reports resolved`}
+        >
+          <div>
+            <strong>{resolvedPercent}%</strong>
+            <span>resolved</span>
+          </div>
+        </div>
+        <div className="ratio-stats">
+          <div>
+            <span className="ratio-stat-icon resolved"><CheckCircle2 size={17} /></span>
+            <p><strong>{formatNumber(resolved)}</strong><span>Resolved</span></p>
+          </div>
+          <div>
+            <span className="ratio-stat-icon pending"><Clock3 size={17} /></span>
+            <p><strong>{formatNumber(pending)}</strong><span>Pending</span></p>
+          </div>
+        </div>
       </div>
       <div className="ratio-track" aria-label={`${resolvedPercent}% resolved, ${pendingPercent}% pending`}>
         <span className="ratio-resolved" style={{ width: `${resolvedPercent}%` }} />
         <span className="ratio-pending" style={{ width: `${pendingPercent}%` }} />
       </div>
-      <div className="ratio-legend">
-        <span><i className="legend-dot resolved" />{formatNumber(resolved)} resolved</span>
-        <span><i className="legend-dot pending" />{formatNumber(pending)} pending</span>
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -435,7 +459,7 @@ function ReportsMapRow({ collection, reports, stats }) {
     <section className="reports-map-row" aria-label="Recent reports and pothole map">
       <RecentReportsCard reports={reports} activeCount={features.length || reports.length} />
       <div className="map-column">
-        <section className="dashboard-section map-card-panel">
+        <section className="dashboard-section map-card-panel" id="map">
           <div className="section-heading compact-heading">
             <h2>Pothole Map</h2>
             <span>{formatNumber(features.length)} locations</span>
@@ -661,30 +685,45 @@ export default function App() {
   }, []);
 
   return (
-    <main className="app-shell">
-      <header className="dashboard-header">
-        <div className="brand-block">
-          <img
-            className="brand-art"
-            src={pathholeLogo}
-            alt="PathHole road marker over a pothole"
-          />
+    <div className="dashboard-app">
+      <aside className="desktop-sidebar">
+        <a className="sidebar-brand" href="#overview" aria-label="PathHole dashboard home">
+          <img src={pathholeLogo} alt="" />
+          <span><strong>PathHole</strong><small>Road command</small></span>
+        </a>
+        <nav className="sidebar-nav" aria-label="Dashboard navigation">
+          <a className="active" href="#overview"><LayoutDashboard size={19} /><span>Overview</span></a>
+          <a href="#reports"><TicketCheck size={19} /><span>Reports</span></a>
+          <a href="#map"><MapIcon size={19} /><span>Live map</span></a>
+          <a href="#wards"><BarChart3 size={19} /><span>Ward stats</span></a>
+          <a href="#lookup"><FileSearch size={19} /><span>Track report</span></a>
+        </nav>
+        <div className="sidebar-footer">
+          <a href={APP_DOWNLOAD_URL} target="_blank" rel="noreferrer">
+            <Smartphone size={20} />
+            <span><strong>Get the app</strong><small>Report from the road</small></span>
+            <ChevronRight size={17} />
+          </a>
+          <p>Public dashboard</p>
+        </div>
+      </aside>
+
+      <main className="app-shell">
+        <header className="dashboard-header" id="overview">
+          <div className="mobile-brand">
+            <img src={pathholeLogo} alt="" />
+            <strong>PathHole</strong>
+          </div>
           <div className="brand-copy">
-            <span className="eyebrow">Public dashboard</span>
-            <h1>PathHole command view</h1>
-            <p>Live road repair signal for report volume, resolution momentum, ward performance, and public ticket lookup.</p>
+            <span className="eyebrow">Live road network</span>
+            <h1>Ready to fix what&apos;s ahead?</h1>
+            <p>Track reports, repair momentum, and ward performance from one citywide view.</p>
             <div className="header-tags" aria-label="Dashboard signals">
-              <span><MapPin size={15} aria-hidden="true" /> Citywide road watch</span>
-              <span><TicketCheck size={15} aria-hidden="true" /> Spot it. Report it. Fix it.</span>
+              <span><i /> Live dashboard</span>
+              <span><MapPin size={14} aria-hidden="true" /> Citywide coverage</span>
             </div>
           </div>
-        </div>
-        <div className="header-actions">
-          <div className="sync-panel" aria-live="polite">
-            <span>Latest sync</span>
-            <strong>{updatedAt ? formatDate(updatedAt) : 'Waiting for data'}</strong>
-          </div>
-          <div className="header-button-group">
+          <div className="header-actions">
             <a
               className="download-button"
               href={APP_DOWNLOAD_URL}
@@ -693,69 +732,100 @@ export default function App() {
               aria-label="Download the PathHole app APK to report potholes"
             >
               <Download size={18} />
-              <span className="download-copy">
-                <strong>Download App</strong>
-                <small>Report potholes from your phone</small>
-              </span>
+              <span>Get the app</span>
             </a>
-            <button type="button" className="refresh-button" onClick={loadDashboard} disabled={loading}>
-              {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-              <span>Refresh</span>
+            <button
+              type="button"
+              className="refresh-button"
+              onClick={loadDashboard}
+              disabled={loading}
+              aria-label="Refresh dashboard data"
+              title="Refresh dashboard"
+            >
+              {loading ? <Loader2 className="spin" size={19} /> : <RefreshCw size={19} />}
             </button>
           </div>
+          <div className="sync-panel" aria-live="polite">
+            <span>Latest sync</span>
+            <strong>{updatedAt ? formatDate(updatedAt) : 'Waiting for data'}</strong>
+          </div>
+        </header>
+
+        {error && (
+          <div className="error-banner" role="alert">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <section className="overview-grid" aria-label="Dashboard summary">
+          <RatioBar resolved={stats.resolved || 0} pending={stats.pending || 0} />
+          <div className="metric-grid">
+            <StatCard
+              icon={BarChart3}
+              label="Reports this month"
+              value={loading ? '...' : formatNumber(stats.totalReportsThisMonth)}
+              detail={`${formatNumber(stats.totalReports)} all-time reports`}
+              tone="blue"
+            />
+            <StatCard
+              icon={CheckCircle2}
+              label="Resolution rate"
+              value={loading ? '...' : `${stats.resolutionRate || 0}%`}
+              detail={`${formatNumber(stats.resolved)} reports resolved`}
+              tone="green"
+            />
+            <StatCard
+              icon={Clock3}
+              label="Average fix time"
+              value={loading ? '...' : `${stats.averageFixTimeDays || 0} days`}
+              detail="Last 30 days"
+              tone="amber"
+            />
+            <StatCard
+              icon={MapPin}
+              label="Overdue work"
+              value={loading ? '...' : formatNumber(stats.overdue)}
+              detail={`${formatNumber(stats.open)} open, ${formatNumber(stats.assigned)} assigned`}
+              tone="red"
+            />
+          </div>
+        </section>
+
+        <section className="quick-actions" aria-labelledby="quick-actions-title">
+          <div className="section-heading compact-heading">
+            <h2 id="quick-actions-title">Quick actions</h2>
+          </div>
+          <div className="quick-action-grid">
+            <a href="#reports"><TicketCheck size={20} /><span>Reports</span></a>
+            <a href="#map"><MapIcon size={20} /><span>Live map</span></a>
+            <a href="#wards"><BarChart3 size={20} /><span>Progress</span></a>
+            <a href="#lookup"><Search size={20} /><span>Track ID</span></a>
+          </div>
+        </section>
+
+        <div id="reports">
+          <ReportsMapRow collection={ticketMap} reports={recentReports} stats={stats} />
         </div>
-      </header>
 
-      {error && (
-        <div className="error-banner" role="alert">
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-        </div>
-      )}
+        <section className="dashboard-grid">
+          <div id="lookup"><LookupPanel /></div>
+          <div id="wards"><WardTable wards={wards} /></div>
+        </section>
 
-      <section className="metric-grid" aria-label="Dashboard summary">
-        <StatCard
-          icon={BarChart3}
-          label="Reports this month"
-          value={loading ? '...' : formatNumber(stats.totalReportsThisMonth)}
-          detail={`${formatNumber(stats.totalReports)} all-time reports`}
-          tone="blue"
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Resolution rate"
-          value={loading ? '...' : `${stats.resolutionRate || 0}%`}
-          detail={`${formatNumber(stats.resolved)} reports resolved`}
-          tone="green"
-        />
-        <StatCard
-          icon={Clock3}
-          label="Average fix time"
-          value={loading ? '...' : `${stats.averageFixTimeDays || 0} days`}
-          detail="Resolved reports from the last 30 days"
-          tone="amber"
-        />
-        <StatCard
-          icon={MapPin}
-          label="Overdue open work"
-          value={loading ? '...' : formatNumber(stats.overdue)}
-          detail={`${formatNumber(stats.open)} open, ${formatNumber(stats.assigned)} assigned`}
-          tone="red"
-        />
-      </section>
+        <footer>
+          <span>PathHole public road dashboard</span>
+          <span>{updatedAt ? `Updated ${formatDate(updatedAt)}` : 'Waiting for data'}</span>
+          <span className="api-label">API: {API_BASE_URL}</span>
+        </footer>
+      </main>
 
-      <section className="dashboard-grid">
-        <RatioBar resolved={stats.resolved || 0} pending={stats.pending || 0} />
-        <LookupPanel />
-      </section>
-
-      <ReportsMapRow collection={ticketMap} reports={recentReports} stats={stats} />
-      <WardTable wards={wards} />
-
-      <footer>
-        <span>API: {API_BASE_URL}</span>
-        <span>{updatedAt ? `Updated ${formatDate(updatedAt)}` : 'Waiting for data'}</span>
-      </footer>
-    </main>
+      <nav className="mobile-nav" aria-label="Mobile dashboard navigation">
+        <a className="active" href="#overview"><Home size={19} /><span>Home</span></a>
+        <a href="#reports"><TicketCheck size={19} /><span>Reports</span></a>
+        <a href="#map"><MapIcon size={19} /><span>Map</span></a>
+        <a href="#lookup"><Search size={19} /><span>Track</span></a>
+      </nav>
+    </div>
   );
 }
