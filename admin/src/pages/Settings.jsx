@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { UserPlus } from 'lucide-react';
 import api from '../api.js';
 import { KARNATAKA_WARD_NAMES, uniqueWardNames } from '../wardNames.js';
 
@@ -154,7 +155,8 @@ export default function Settings({ user }) {
             {workerError && <p className="form-error">{workerError}</p>}
             {workerMessage && <p className="form-success">{workerMessage}</p>}
             <button type="submit" disabled={savingWorker}>
-              {savingWorker ? 'Adding...' : 'Add worker'}
+              <UserPlus size={18} />
+              <span>{savingWorker ? 'Adding...' : 'Add worker'}</span>
             </button>
           </form>
           <div className="stack-list compact-list">

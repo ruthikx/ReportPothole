@@ -1,18 +1,54 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, ClipboardList, LogOut, Settings, UserPlus } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart3,
+  ClipboardList,
+  LogIn,
+  LogOut,
+  Settings,
+  ShieldCheck,
+  TicketCheck,
+  UserPlus,
+} from 'lucide-react';
 import api from './api.js';
 import Queue from './pages/Queue.jsx';
 import Assign from './pages/Assign.jsx';
 import Escalations from './pages/Escalations.jsx';
 import Analytics from './pages/Analytics.jsx';
 import SettingsPage from './pages/Settings.jsx';
+import pathholeLogo from './assets/pathhole-logo.jpg';
 
 const NAV_ITEMS = [
-  { id: 'queue', label: 'Queue', icon: ClipboardList },
-  { id: 'assign', label: 'Assign', icon: UserPlus },
-  { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  {
+    id: 'queue',
+    label: 'Queue',
+    icon: ClipboardList,
+    description: 'Review and route every incoming road report.',
+  },
+  {
+    id: 'assign',
+    label: 'Assign',
+    icon: UserPlus,
+    description: 'Send selected work to the right field crew.',
+  },
+  {
+    id: 'escalations',
+    label: 'Escalations',
+    icon: AlertTriangle,
+    description: 'Prioritize tickets that have crossed their SLA.',
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    description: 'Monitor repair volume, pace, and resolution health.',
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    description: 'Manage wards, field workers, and staff access.',
+  },
 ];
 const ADMIN_ROLES = ['engineer', 'supervisor', 'commissioner', 'admin'];
 
@@ -58,19 +94,52 @@ function Login({ onLogin }) {
 
   return (
     <main className="login-screen">
+      <section className="login-visual" aria-label="PathHole road operations">
+        <div className="login-brand">
+          <img src={pathholeLogo} alt="" />
+          <span><strong>PathHole</strong><small>Road command</small></span>
+        </div>
+        <div className="login-visual-copy">
+          <span className="eyebrow">Municipal operations</span>
+          <h2>Keep every repair moving.</h2>
+          <p>Coordinate road reports, field assignments, escalations, and ward performance from one live console.</p>
+          <div className="header-tags">
+            <span><i /> Operations online</span>
+            <span><ShieldCheck size={14} aria-hidden="true" /> Staff access</span>
+          </div>
+        </div>
+      </section>
       <form className="login-panel" onSubmit={submit}>
-        <span className="eyebrow">Municipal staff</span>
-        <h1>PotholeTrack Admin</h1>
+        <div className="login-heading">
+          <span className="eyebrow">Municipal staff</span>
+          <h1>Admin sign in</h1>
+          <p>Use your authorized PathHole staff account.</p>
+        </div>
         <label>
           Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            type="email"
+            placeholder="name@city.gov"
+            required
+          />
         </label>
         <label>
           Password
-          <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            placeholder="Enter your password"
+            required
+          />
         </label>
         {error && <p className="form-error">{error}</p>}
-        <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
+        <button type="submit" disabled={loading}>
+          <LogIn size={18} />
+          <span>{loading ? 'Signing in...' : 'Sign in'}</span>
+        </button>
       </form>
     </main>
   );
@@ -87,8 +156,8 @@ export default function App() {
     return hasAdminToken;
   });
 
-  const activeLabel = useMemo(
-    () => NAV_ITEMS.find((item) => item.id === active)?.label || 'Queue',
+  const activeItem = useMemo(
+    () => NAV_ITEMS.find((item) => item.id === active) || NAV_ITEMS[0],
     [active]
   );
 
@@ -104,16 +173,18 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">PT</span>
-          <div>
-            <strong>PotholeTrack</strong>
-            <span>Admin Console</span>
-          </div>
-        </div>
-        <nav>
+    <div className="admin-app">
+      <aside className="desktop-sidebar">
+        <button
+          className="sidebar-brand"
+          onClick={() => setActive('queue')}
+          type="button"
+          aria-label="Open the PathHole admin queue"
+        >
+          <img src={pathholeLogo} alt="" />
+          <span><strong>PathHole</strong><small>Road command</small></span>
+        </button>
+        <nav className="sidebar-nav" aria-label="Admin navigation">
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -126,52 +197,102 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <button className="logout" onClick={logout} type="button">
-          <LogOut size={18} />
-          <span>Sign out</span>
-        </button>
-      </aside>
-      <main className="main-panel">
-        <header className="topbar">
-          <div>
-            <span className="eyebrow">{user?.role || 'Staff access'}</span>
-            <h1>{activeLabel}</h1>
+        <div className="sidebar-footer">
+          <div className="staff-card">
+            <ShieldCheck size={20} />
+            <span>
+              <strong>{user?.name || 'Staff user'}</strong>
+              <small>{user?.role || 'Authorized access'}</small>
+            </span>
           </div>
-          {selectedTicket && (
-            <button className="ghost-button" onClick={() => setActive('assign')} type="button">
-              Selected: {selectedTicket.reportId}
+          <button className="logout" onClick={logout} type="button">
+            <LogOut size={18} />
+            <span>Sign out</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="admin-main">
+        <header className="admin-header">
+          <div className="mobile-brand">
+            <img src={pathholeLogo} alt="" />
+            <strong>PathHole</strong>
+          </div>
+          <div className="admin-header-copy">
+            <span className="eyebrow">{user?.role || 'Staff access'} workspace</span>
+            <h1>{activeItem.label}</h1>
+            <p>{activeItem.description}</p>
+            <div className="header-tags" aria-label="Admin workspace signals">
+              <span><i /> Operations online</span>
+              <span><ShieldCheck size={14} aria-hidden="true" /> Authorized staff</span>
+            </div>
+          </div>
+          <div className="header-actions">
+            {selectedTicket && (
+              <button className="selected-ticket-button" onClick={() => setActive('assign')} type="button">
+                <TicketCheck size={17} />
+                <span>{selectedTicket.reportId}</span>
+              </button>
+            )}
+            <button className="mobile-logout" onClick={logout} type="button" aria-label="Sign out" title="Sign out">
+              <LogOut size={18} />
             </button>
-          )}
+          </div>
+          <div className="staff-panel">
+            <span>Signed in as</span>
+            <strong>{user?.name || user?.email || 'Staff user'}</strong>
+          </div>
         </header>
 
-        {active === 'queue' && (
-          <Queue
-            onSelectTicket={(ticket) => {
-              setSelectedTicket(ticket);
-              setActive('assign');
-            }}
-          />
-        )}
-        {active === 'assign' && (
-          <Assign
-            ticket={selectedTicket}
-            onDone={() => {
-              setActive('queue');
-              setSelectedTicket(null);
-            }}
-          />
-        )}
-        {active === 'escalations' && (
-          <Escalations
-            onSelectTicket={(ticket) => {
-              setSelectedTicket(ticket);
-              setActive('assign');
-            }}
-          />
-        )}
-        {active === 'analytics' && <Analytics />}
-        {active === 'settings' && <SettingsPage user={user} />}
+        <div className="admin-content">
+          {active === 'queue' && (
+            <Queue
+              onSelectTicket={(ticket) => {
+                setSelectedTicket(ticket);
+                setActive('assign');
+              }}
+            />
+          )}
+          {active === 'assign' && (
+            <Assign
+              ticket={selectedTicket}
+              onDone={() => {
+                setActive('queue');
+                setSelectedTicket(null);
+              }}
+            />
+          )}
+          {active === 'escalations' && (
+            <Escalations
+              onSelectTicket={(ticket) => {
+                setSelectedTicket(ticket);
+                setActive('assign');
+              }}
+            />
+          )}
+          {active === 'analytics' && <Analytics />}
+          {active === 'settings' && <SettingsPage user={user} />}
+        </div>
+
+        <footer>
+          <span>PathHole municipal road command</span>
+          <span>{user?.role || 'Staff'} access</span>
+        </footer>
       </main>
+
+      <nav className="mobile-nav" aria-label="Mobile admin navigation">
+        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            className={active === id ? 'active' : ''}
+            onClick={() => setActive(id)}
+            type="button"
+          >
+            <Icon size={19} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

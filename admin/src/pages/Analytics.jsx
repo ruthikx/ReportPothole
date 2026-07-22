@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BarChart3, CheckCircle2, Clock3, TicketCheck } from 'lucide-react';
 import api from '../api.js';
 
 export default function Analytics() {
@@ -12,10 +13,22 @@ export default function Analytics() {
 
   return (
     <section className="page stats-grid">
-      <article><span>Total</span><strong>{stats.totalReports}</strong></article>
-      <article><span>Resolved</span><strong>{stats.resolved}</strong></article>
-      <article><span>Pending</span><strong>{stats.pending}</strong></article>
-      <article><span>Avg fix</span><strong>{stats.averageFixTimeDays}d</strong></article>
+      <article className="stat-card stat-card-blue">
+        <span className="stat-icon"><BarChart3 size={20} /></span>
+        <div><span>Total reports</span><strong>{stats.totalReports}</strong><small>All recorded road reports</small></div>
+      </article>
+      <article className="stat-card stat-card-green">
+        <span className="stat-icon"><CheckCircle2 size={20} /></span>
+        <div><span>Resolved</span><strong>{stats.resolved}</strong><small>Repairs completed</small></div>
+      </article>
+      <article className="stat-card stat-card-amber">
+        <span className="stat-icon"><TicketCheck size={20} /></span>
+        <div><span>Pending</span><strong>{stats.pending}</strong><small>Reports still active</small></div>
+      </article>
+      <article className="stat-card stat-card-violet">
+        <span className="stat-icon"><Clock3 size={20} /></span>
+        <div><span>Average fix time</span><strong>{stats.averageFixTimeDays}d</strong><small>Current repair pace</small></div>
+      </article>
     </section>
   );
 }

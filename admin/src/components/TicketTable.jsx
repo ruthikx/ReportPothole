@@ -37,7 +37,7 @@ export default function TicketTable({ tickets, onSelect, emptyLabel = 'No ticket
 
             return (
               <tr key={ticket._id} onClick={() => onSelect?.(ticket)}>
-                <td>
+                <td data-label="Image" className="image-cell">
                   {thumbnailUrl ? (
                     <img
                       className="ticket-thumb"
@@ -49,19 +49,19 @@ export default function TicketTable({ tickets, onSelect, emptyLabel = 'No ticket
                     <span className="ticket-thumb-placeholder">No image</span>
                   )}
                 </td>
-                <td>
+                <td data-label="Report" className="report-cell">
                   <strong>{ticket.reportId}</strong>
                   <span>{ticket.description || 'No public note'}</span>
                 </td>
-                <td>
+                <td data-label="Address">
                   <span className="address-cell">{ticket.address || 'No address provided'}</span>
                 </td>
-                <td>{wardName || 'Unassigned'}</td>
-                <td><StatusBadge status={ticket.status} /></td>
-                <td>{ticket.assignedTo?.name || 'None'}</td>
-                <td><SlaBadge deadline={ticket.slaDeadline} /></td>
-                <td>L{ticket.escalationLevel || 0}</td>
-                <td>{ticket.upvotes || 0}</td>
+                <td data-label="Ward">{wardName || 'Unassigned'}</td>
+                <td data-label="Status"><StatusBadge status={ticket.status} /></td>
+                <td data-label="Assigned">{ticket.assignedTo?.name || 'None'}</td>
+                <td data-label="SLA"><SlaBadge deadline={ticket.slaDeadline} /></td>
+                <td data-label="Escalation">L{ticket.escalationLevel || 0}</td>
+                <td data-label="Upvotes">{ticket.upvotes || 0}</td>
               </tr>
             );
           })}

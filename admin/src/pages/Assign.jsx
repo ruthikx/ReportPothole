@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MapPin, UserPlus } from 'lucide-react';
 import api, { resolveMediaUrl } from '../api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { inferWardName } from '../wardNames.js';
@@ -54,35 +55,48 @@ export default function Assign({ ticket, onDone }) {
           ) : (
             <div className="ticket-detail-image placeholder">No image</div>
           )}
-          <div>
-            <h2>{ticket.reportId}</h2>
-            <StatusBadge status={ticket.status} />
+          <div className="ticket-detail-copy">
+            <div className="ticket-detail-heading">
+              <div>
+                <span className="eyebrow">Selected report</span>
+                <h2>{ticket.reportId}</h2>
+              </div>
+              <StatusBadge status={ticket.status} />
+            </div>
             <p>{ticket.description || 'No public note'}</p>
             <div className="detail-stack">
               <div className="row">
-                <strong>Address:</strong> <span>{ticket.address || 'No address provided'}</span>
+                <MapPin size={17} aria-hidden="true" />
+                <div><strong>Address</strong><span>{ticket.address || 'No address provided'}</span></div>
               </div>
               <div className="row">
-                <strong>Ward:</strong> <span>{ticketWardName || 'Unassigned'}</span>
+                <MapPin size={17} aria-hidden="true" />
+                <div><strong>Ward</strong><span>{ticketWardName || 'Unassigned'}</span></div>
               </div>
             </div>
           </div>
         </div>
       </div>
-      <div className="toolbar">
-        <select value={workerId} onChange={(e) => setWorkerId(e.target.value)} disabled={loadingWorkers || workers.length === 0}>
-          <option value="">
-            {loadingWorkers ? 'Loading field workers...' : 'Select a field worker'}
-          </option>
-          {workers.map((worker) => (
-            <option key={worker._id} value={worker._id}>
-              {worker.name}
-              {worker.wardName || worker.ward?.name ? ` - ${worker.wardName || worker.ward?.name}` : ''}
-              {worker.phone ? ` (${worker.phone})` : ''}
+      <div className="toolbar assignment-toolbar">
+        <label>
+          <span>Field worker or crew</span>
+          <select value={workerId} onChange={(e) => setWorkerId(e.target.value)} disabled={loadingWorkers || workers.length === 0}>
+            <option value="">
+              {loadingWorkers ? 'Loading field workers...' : 'Select a field worker'}
             </option>
-          ))}
-        </select>
-        <button disabled={!workerId || loading} onClick={assign}>Assign</button>
+            {workers.map((worker) => (
+              <option key={worker._id} value={worker._id}>
+                {worker.name}
+                {worker.wardName || worker.ward?.name ? ` - ${worker.wardName || worker.ward?.name}` : ''}
+                {worker.phone ? ` (${worker.phone})` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button disabled={!workerId || loading} onClick={assign}>
+          <UserPlus size={18} />
+          <span>{loading ? 'Assigning...' : 'Assign report'}</span>
+        </button>
       </div>
       {!loadingWorkers && workers.length === 0 && (
         <div className="empty-state">

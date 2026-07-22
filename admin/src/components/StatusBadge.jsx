@@ -1,10 +1,3 @@
-const COLORS = {
-  open: '#6b7280',
-  assigned: '#2563eb',
-  in_progress: '#d97706',
-  resolved: '#059669',
-};
-
 const LABELS = {
   open: 'Open',
   assigned: 'Assigned',
@@ -14,7 +7,7 @@ const LABELS = {
 
 export default function StatusBadge({ status }) {
   return (
-    <span className="status-badge" style={{ backgroundColor: COLORS[status] || '#6b7280' }}>
+    <span className={`status-badge status-${status || 'unknown'}`}>
       {LABELS[status] || status || 'Unknown'}
     </span>
   );

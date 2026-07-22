@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { MapPin } from 'lucide-react';
 import api from '../api.js';
 import TicketTable from '../components/TicketTable.jsx';
 
@@ -55,12 +56,16 @@ export default function Queue({ onSelectTicket }) {
             </button>
           ))}
         </div>
-        <select value={ward} onChange={(e) => setWard(e.target.value)}>
-          <option value="">All wards</option>
-          {wards.map((item) => (
-            <option key={item._id} value={item._id}>{item.name}</option>
-          ))}
-        </select>
+        <label className="select-control">
+          <MapPin size={17} aria-hidden="true" />
+          <span className="sr-only">Filter by ward</span>
+          <select value={ward} onChange={(e) => setWard(e.target.value)}>
+            <option value="">All wards</option>
+            {wards.map((item) => (
+              <option key={item._id} value={item._id}>{item.name}</option>
+            ))}
+          </select>
+        </label>
       </div>
       {loading ? (
         <div className="empty-state">Loading queue...</div>
