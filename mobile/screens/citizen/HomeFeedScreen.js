@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     alignItems: 'center',
-    backgroundColor: '#FF8A00',
+    backgroundColor: '#fefefe',
     borderRadius: 8,
     height: 32,
     justifyContent: 'center',

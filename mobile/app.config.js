@@ -13,7 +13,7 @@ export default {
         {
           image: "./assets/splash.png",
           resizeMode: "contain",
-          backgroundColor: "#1a73e8"
+          backgroundColor: "#fefefe"
         }
       ],
       [
